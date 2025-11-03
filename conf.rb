@@ -1,6 +1,11 @@
 require 'sinatra'
 require 'sinatra/config_file'
 require 'yaml'
+
+# Ruby 2.4+ compatibility: Fixnum and Bignum were unified into Integer
+Fixnum = Integer unless defined?(Fixnum)
+Bignum = Integer unless defined?(Bignum)
+
 require 'data_mapper'
 
 config_file File.join(File.dirname(File.expand_path(__FILE__)), 'config.yaml')
