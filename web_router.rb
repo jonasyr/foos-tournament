@@ -13,6 +13,13 @@ require 'player_repository'
 require 'result_processor'
 require 'hook_manager'
 
+# Disable Rack protection for LAN development (allows API calls from localhost and LAN hostnames)
+# This must come AFTER all requires to ensure config_file doesn't override it
+set :protection, except: [:host_authorization, :json_csrf, :remote_token]
+set :bind, '0.0.0.0'
+set :allow_origin, :any
+set :allow_methods, [:get, :post, :put, :delete, :options]
+
 get '/' do
   season_repo = SeasonRepository.new()
   @seasons = season_repo.get_all_seasons()
@@ -394,9 +401,7 @@ get '/api/get_open_matches' do
 end
 
 before '/api/set_*' do
-  if params['apiKey'] != Conf.settings.api_key
-    halt 403
-  end
+  halt 403 unless params['apiKey'] && API_KEYS.include?(params['apiKey'])
 end
 
 # ===============================================

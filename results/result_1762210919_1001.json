@@ -1,0 +1,30 @@
+{
+  "id": 1001,
+  "division": "Test Division",
+  "players": [
+    "Alice",
+    "Bob",
+    "Carol",
+    "Dave"
+  ],
+  "submatches": [
+    [
+      [
+        "Alice",
+        "Bob"
+      ],
+      [
+        "Carol",
+        "Dave"
+      ]
+    ]
+  ],
+  "start": 1762209376,
+  "results": [
+    [
+      0,
+      5
+    ]
+  ],
+  "end": 1762209451
+}
