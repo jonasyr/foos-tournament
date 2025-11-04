@@ -242,6 +242,36 @@ function setup_quick_match_form() {
     var feedback = $("#quick-match-feedback");
     var submitButton = $("#quick-match-submit");
     var defaultButtonText = submitButton.text();
+    var modeField = $("#quick-match-mode");
+    var playerGroups = form.find('.quick-match-player-group');
+    var playerSelects = form.find('.quick-match-player');
+
+    function updatePlayerFieldsForMode(mode) {
+        mode = (mode || '').toString().toLowerCase();
+        if (mode !== 'singles' && mode !== 'doubles') {
+            mode = 'doubles';
+        }
+
+        playerGroups.each(function() {
+            var group = $(this);
+            var slot = parseInt(group.data('slot'), 10);
+            var select = group.find('.quick-match-player');
+            var optional = (slot === 1 || slot === 3);
+            if (mode === 'singles' && optional) {
+                group.addClass('hidden');
+                select.prop('disabled', true).prop('required', false).val('');
+            } else {
+                group.removeClass('hidden');
+                select.prop('disabled', false).prop('required', true);
+            }
+        });
+    }
+
+    modeField.off('change').on('change', function() {
+        updatePlayerFieldsForMode($(this).val());
+    });
+
+    updatePlayerFieldsForMode(modeField.val());
 
     form.off('submit').on('submit', function(event) {
         event.preventDefault();
@@ -251,25 +281,40 @@ function setup_quick_match_form() {
 
         var divisionId = parseInt(form.data('division-id'), 10);
         var apiKey = $("#quick-match-api-key").val().trim();
-        var playerIds = [];
-        var missingSelection = false;
+        var mode = (modeField.val() || '').toString().toLowerCase();
+        if ($.inArray(mode, ['singles', 'doubles']) === -1) {
+            mode = 'doubles';
+        }
 
-        form.find('.quick-match-player').each(function() {
-            var value = $(this).val();
-            if (!value) {
-                missingSelection = true;
-            } else {
-                playerIds.push(parseInt(value, 10));
+        var playerIds = [null, null, null, null];
+        var presentPlayers = [];
+
+        playerSelects.each(function() {
+            var select = $(this);
+            var slot = parseInt(select.data('slot'), 10);
+            if (isNaN(slot)) {
+                return;
+            }
+            var value = select.val();
+            if (value) {
+                var parsed = parseInt(value, 10);
+                playerIds[slot] = parsed;
+                presentPlayers.push(parsed);
             }
         });
 
-        if (missingSelection || playerIds.length !== 4) {
-            show_quick_match_feedback('warning', 'Please select four different players.');
+        var requiredSlots = mode === 'singles' ? [0, 2] : [0, 1, 2, 3];
+        var missingRequired = requiredSlots.some(function(slot) {
+            return playerIds[slot] === null || playerIds[slot] === undefined;
+        });
+        if (missingRequired) {
+            var message = mode === 'singles' ? 'Please select one player for each side.' : 'Please select four different players.';
+            show_quick_match_feedback('warning', message);
             return;
         }
 
-        var uniquePlayers = Array.from(new Set(playerIds));
-        if (uniquePlayers.length !== 4) {
+        var uniquePlayers = Array.from(new Set(presentPlayers));
+        if (uniquePlayers.length !== presentPlayers.length) {
             show_quick_match_feedback('warning', 'Each player can only be selected once.');
             return;
         }
@@ -289,11 +334,14 @@ function setup_quick_match_form() {
             headers: { 'X-API-KEY': apiKey },
             data: JSON.stringify({
                 division_id: divisionId,
-                player_ids: playerIds
+                player_ids: playerIds,
+                mode: mode
             })
         }).done(function(response) {
             show_quick_match_feedback('success', 'Quick match created (ID #' + response.match.id + ').');
             form[0].reset();
+            modeField.val('doubles');
+            updatePlayerFieldsForMode(modeField.val());
             setTimeout(function() { load_division_subsection(divisionId); }, 600);
         }).fail(function(xhr) {
             var message = 'Could not create quick match.';

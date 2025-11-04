@@ -48,9 +48,25 @@ end
 def create_quick_match(division_id:, players:, mode: nil, win_condition: nil, target_score: nil, round: nil)
   raise ArgumentError, 'division_id is required for quick matches' if division_id.nil?
 
+  normalized_mode = (mode || 'doubles').to_s.downcase
+  normalized_mode = 'doubles' if normalized_mode.empty? || normalized_mode == 'standard'
+
   player_ids = Array(players).dup
-  player_ids.fill(nil, player_ids.length...4)
-  player_ids = player_ids.first(4)
+
+  case normalized_mode
+  when 'singles'
+    player_ids = player_ids.compact
+    if player_ids.length != 2
+      raise ArgumentError, 'Singles quick matches require exactly two players'
+    end
+    player_ids = [player_ids[0], nil, player_ids[1], nil]
+  else
+    player_ids.fill(nil, player_ids.length...4)
+    player_ids = player_ids.first(4)
+    if player_ids.compact.length != 4
+      raise ArgumentError, 'Doubles quick matches require four players'
+    end
+  end
 
   # Quick matches use round 0 by default (not bound to league rounds)
   round = 0 if round.nil?
@@ -61,7 +77,7 @@ def create_quick_match(division_id:, players:, mode: nil, win_condition: nil, ta
     division_id,
     round,
     quick_match: true,
-    mode: mode,
+    mode: normalized_mode,
     win_condition: win_condition,
     target_score: target_score,
     status: 0
@@ -120,13 +136,15 @@ def map_entity_to_record(match_entity, match_record)
   match_record.win_condition = match_entity.win_condition || Match::DEFAULT_WIN_CONDITION
   match_record.target_score = match_entity.target_score || Match::DEFAULT_TARGET_SCORE
   if match_entity.played?
-    scores = match_entity.scores
-    match_record.score1a = scores[0][0]
-    match_record.score1b = scores[0][1]
-    match_record.score2a = scores[1][0]
-    match_record.score2b = scores[1][1]
-    match_record.score3a = scores[2][0]
-    match_record.score3b = scores[2][1]
+    scores = match_entity.scores || []
+    # Quick matches may have 1 submatch, league matches have 3
+    # Store each submatch safely, leaving unset ones as nil
+    match_record.score1a = scores[0] ? scores[0][0] : nil
+    match_record.score1b = scores[0] ? scores[0][1] : nil
+    match_record.score2a = scores[1] ? scores[1][0] : nil
+    match_record.score2b = scores[1] ? scores[1][1] : nil
+    match_record.score3a = scores[2] ? scores[2][0] : nil
+    match_record.score3b = scores[2] ? scores[2][1] : nil
     time = match_entity.time
     time = Time.now() if time == nil
     match_record.time = time
@@ -140,11 +158,35 @@ def validate_match_entity!(match_entity)
     raise ArgumentError, 'Match must contain exactly four player slots'
   end
 
-  if players.any?(&:nil?)
-    raise ArgumentError, 'Match players must all be present'
+  present_players = players.compact
+
+  if match_entity.quick_match?
+    mode = match_entity.mode.to_s.downcase
+    mode = 'doubles' if mode.empty? || mode == 'standard'
+
+    case mode
+    when 'singles'
+      if present_players.length != 2
+        raise ArgumentError, 'Singles quick matches require exactly two players'
+      end
+      unless players[0] && players[2]
+        raise ArgumentError, 'Singles quick matches must assign one player per side'
+      end
+      if players[1] || players[3]
+        raise ArgumentError, 'Singles quick matches should leave partner slots empty'
+      end
+    else
+      if present_players.length != 4
+        raise ArgumentError, 'Doubles quick matches require four players'
+      end
+    end
+  else
+    if present_players.length != 4
+      raise ArgumentError, 'Match players must all be present'
+    end
   end
 
-  if players.uniq.length != players.length
+  if present_players.uniq.length != present_players.length
     raise ArgumentError, 'Match players must be unique'
   end
 end

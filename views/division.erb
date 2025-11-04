@@ -37,35 +37,44 @@
 <form id="quick-match-form" class="form-inline" data-division-id="<%= @division_id %>">
   <div class="row">
     <div class="col-sm-6 col-md-3 form-group">
+      <label class="sr-only" for="quick-match-mode">Match mode</label>
+      <select class="form-control" id="quick-match-mode" name="mode">
+        <option value="doubles" selected>Doubles</option>
+        <option value="singles">Singles</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-sm-6 col-md-3 form-group quick-match-player-group" data-slot="0">
       <label class="sr-only" for="quick-match-player1">Player 1</label>
-      <select class="form-control quick-match-player" id="quick-match-player1" name="player1" required>
+      <select class="form-control quick-match-player" id="quick-match-player1" name="player1" data-slot="0" required>
         <option value="">Select player 1</option>
         <% players_sorted.each do |player| %>
           <option value="<%= player.id %>"><%= player.name %></option>
         <% end %>
       </select>
     </div>
-    <div class="col-sm-6 col-md-3 form-group">
+    <div class="col-sm-6 col-md-3 form-group quick-match-player-group" data-slot="1">
       <label class="sr-only" for="quick-match-player2">Player 2</label>
-      <select class="form-control quick-match-player" id="quick-match-player2" name="player2" required>
+      <select class="form-control quick-match-player" id="quick-match-player2" name="player2" data-slot="1" required>
         <option value="">Select player 2</option>
         <% players_sorted.each do |player| %>
           <option value="<%= player.id %>"><%= player.name %></option>
         <% end %>
       </select>
     </div>
-    <div class="col-sm-6 col-md-3 form-group">
+    <div class="col-sm-6 col-md-3 form-group quick-match-player-group" data-slot="2">
       <label class="sr-only" for="quick-match-player3">Player 3</label>
-      <select class="form-control quick-match-player" id="quick-match-player3" name="player3" required>
+      <select class="form-control quick-match-player" id="quick-match-player3" name="player3" data-slot="2" required>
         <option value="">Select player 3</option>
         <% players_sorted.each do |player| %>
           <option value="<%= player.id %>"><%= player.name %></option>
         <% end %>
       </select>
     </div>
-    <div class="col-sm-6 col-md-3 form-group">
+    <div class="col-sm-6 col-md-3 form-group quick-match-player-group" data-slot="3">
       <label class="sr-only" for="quick-match-player4">Player 4</label>
-      <select class="form-control quick-match-player" id="quick-match-player4" name="player4" required>
+      <select class="form-control quick-match-player" id="quick-match-player4" name="player4" data-slot="3" required>
         <option value="">Select player 4</option>
         <% players_sorted.each do |player| %>
           <option value="<%= player.id %>"><%= player.name %></option>
@@ -85,6 +94,37 @@
 </form>
 <div id="quick-match-feedback" class="alert" style="display:none;"></div>
 </div>
+
+<% require 'rack/utils' %>
+<% player_name = lambda do |player_id|
+     player = player_id && @players[player_id]
+     player ? player.name : '—'
+   end %>
+<% player_name_for_popover = lambda do |player_id|
+     Rack::Utils.escape_html(player_name.call(player_id))
+   end %>
+<% format_team_label = lambda do |team_ids|
+     names = Array(team_ids).map { |pid| player_name_for_popover.call(pid) }
+     label = names.reject(&:empty?).join(' + ')
+     label = '—' if label.empty?
+     label
+   end %>
+<% match_popover_rows = lambda do |match|
+     rows = []
+     submatches = match.get_submatches
+     if submatches.empty?
+       rows << "<tr><td colspan='3' class='text-center'>No results</td></tr>"
+     else
+       submatches.each do |team1_ids, score_a, team2_ids, score_b|
+         team1 = format_team_label.call(team1_ids)
+         team2 = format_team_label.call(team2_ids)
+         score_a_text = Rack::Utils.escape_html(score_a.nil? ? '-' : score_a.to_s)
+         score_b_text = Rack::Utils.escape_html(score_b.nil? ? '-' : score_b.to_s)
+         rows << "<tr><td class='text-right'>#{team1}</td><td>#{score_a_text}-#{score_b_text}</td><td>#{team2}</td></tr>"
+       end
+     end
+     rows.join
+   end %>
 
 <div class="col-md-12">
 <div class="match-scope-toolbar clearfix">
@@ -111,11 +151,11 @@
         <% if quick %>
           <span class="label label-warning match-type-label" title="Quick Match"><span class="glyphicon glyphicon-flash" aria-hidden="true"></span><span class="sr-only">Quick Match</span></span>
         <% end %>
-        <%= @players[m.players[0]].name %>
+        <%= player_name.call(m.players[0]) %>
       </td>
-      <td><%= @players[m.players[1]].name %></td>
-      <td><%= @players[m.players[2]].name %></td>
-      <td><%= @players[m.players[3]].name %></td>
+      <td><%= player_name.call(m.players[1]) %></td>
+      <td><%= player_name.call(m.players[2]) %></td>
+      <td><%= player_name.call(m.players[3]) %></td>
       <td><button class="btn btn-default btn-xs" type="button" data-toggle="modal" data-target="#simulator-modal" data-match-id="<%= m.id %>">Predict</button></td>
     </tr>
     <% end %>
@@ -148,11 +188,11 @@
           <span class="label label-warning match-type-label" title="Quick Match"><span class="glyphicon glyphicon-flash" aria-hidden="true"></span><span class="sr-only">Quick Match</span></span>
         <% end %>
       </td>
-      <td><%= @players[m.players[0]].name %></td><td><%= m.victories[0] %></td>
-      <td><%= @players[m.players[1]].name %></td><td><%= m.victories[1] %></td>
-      <td><%= @players[m.players[2]].name %></td><td><%= m.victories[2] %></td>
-      <td><%= @players[m.players[3]].name %></td><td><%= m.victories[3] %></td>
-      <td class="text-center"><button class="btn btn-default btn-xs match-result-popover" data-toggle="popover" data-content="<table class='table table-condensed table-borderless'><tr><td class='text-right'><%= @players[m.players[0]].name %> + <%= @players[m.players[1]].name %></td><td><%= m.scores[0][0].to_s %>-<%= m.scores[0][1].to_s %></td><td><%= @players[m.players[2]].name %> + <%= @players[m.players[3]].name %></td></tr><tr><td class='text-right'><%= @players[m.players[0]].name %> + <%= @players[m.players[2]].name %></td><td><%= m.scores[1][0].to_s %>-<%= m.scores[1][1].to_s %></td><td><%= @players[m.players[1]].name %> + <%= @players[m.players[3]].name %></td></tr><tr><td class='text-right'><%= @players[m.players[0]].name %> + <%= @players[m.players[3]].name %></td><td><%= m.scores[2][0].to_s %>-<%= m.scores[2][1].to_s %></td><td><%= @players[m.players[1]].name %> + <%= @players[m.players[2]].name %></td></tr></table>">Details</button></td>
+      <td><%= player_name.call(m.players[0]) %></td><td><%= m.victories[0] %></td>
+      <td><%= player_name.call(m.players[1]) %></td><td><%= m.victories[1] %></td>
+      <td><%= player_name.call(m.players[2]) %></td><td><%= m.victories[2] %></td>
+      <td><%= player_name.call(m.players[3]) %></td><td><%= m.victories[3] %></td>
+      <td class="text-center"><button class="btn btn-default btn-xs match-result-popover" data-toggle="popover" data-content="<table class='table table-condensed table-borderless'><%= match_popover_rows.call(m) %></table>">Details</button></td>
       <td class="text-center"><button class="btn btn-default btn-xs" type="button" data-toggle="modal" data-target="#history-modal" data-division-id="<%= @division_id %>" data-match-id="<%= m.id %>"><span class="glyphicon glyphicon-sort"></span></button>
       <td class="text-center"><%= m.get_duration() %></td>
     </tr>

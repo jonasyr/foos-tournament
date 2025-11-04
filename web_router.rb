@@ -170,10 +170,18 @@ get '/ajax/simulator/:match' do
   end
 
   present_players = @match_players.compact
-  missing_players = match_player_names.any?(&:nil?)
+  singles_mode = match.quick_match? && (match.mode.to_s.downcase == 'singles')
+  missing_players = if singles_mode
+    [match_player_names[0], match_player_names[2]].any?(&:nil?)
+  else
+    match_player_names.any?(&:nil?)
+  end
   duplicated_players = present_players.uniq.length != present_players.length
-  @simulator_disabled = missing_players || duplicated_players
-  @simulator_error = if missing_players
+  simulator_unsupported = singles_mode
+  @simulator_disabled = missing_players || duplicated_players || simulator_unsupported
+  @simulator_error = if simulator_unsupported
+    'The simulator is currently only available for doubles matches.'
+  elsif missing_players
     'Not enough players are assigned to this match yet. Assign both teams to enable the simulator.'
   elsif duplicated_players
     'Each player can only appear once in the lineup. Please adjust the teams before running the simulator.'
@@ -197,29 +205,42 @@ get '/ajax/simulator/:match' do
   @results1 = [[5, 0], [5, 1], [5, 2], [5, 3], [5, 4]]
   @results2 = [[4, 5], [3, 5], [2, 5], [1, 5], [0, 5]]
 
-  @submatches = [
-    {
-      :idx => 1,
-      :player1a => safe_name.call(0),
-      :player1b => safe_name.call(1),
-      :player2a => safe_name.call(2),
-      :player2b => safe_name.call(3),
-    },
-    {
-      :idx => 2,
-      :player1a => safe_name.call(0),
-      :player1b => safe_name.call(2),
-      :player2a => safe_name.call(1),
-      :player2b => safe_name.call(3),
-    },
-    {
-      :idx => 3,
-      :player1a => safe_name.call(0),
-      :player1b => safe_name.call(3),
-      :player2a => safe_name.call(1),
-      :player2b => safe_name.call(2),
-    }
-  ]
+  if singles_mode
+    placeholder = '—'
+    @submatches = [
+      {
+        :idx => 1,
+        :player1a => safe_name.call(0),
+        :player1b => placeholder,
+        :player2a => safe_name.call(2),
+        :player2b => placeholder,
+      }
+    ]
+  else
+    @submatches = [
+      {
+        :idx => 1,
+        :player1a => safe_name.call(0),
+        :player1b => safe_name.call(1),
+        :player2a => safe_name.call(2),
+        :player2b => safe_name.call(3),
+      },
+      {
+        :idx => 2,
+        :player1a => safe_name.call(0),
+        :player1b => safe_name.call(2),
+        :player2a => safe_name.call(1),
+        :player2b => safe_name.call(3),
+      },
+      {
+        :idx => 3,
+        :player1a => safe_name.call(0),
+        :player1b => safe_name.call(3),
+        :player2a => safe_name.call(1),
+        :player2b => safe_name.call(2),
+      }
+    ]
+  end
 
   erb :simulator
 end
@@ -656,32 +677,62 @@ post '/api/create_quick_match' do
   division_id = (data['division_id'] || params['division_id']).to_i
   halt 400, json_api({'error' => 'division_id is required'}) if division_id <= 0
 
-  player_ids = data['player_ids']
-  unless player_ids
-    player_ids = [params['player1'], params['player2'], params['player3'], params['player4']].compact
-  end
-  player_ids = player_ids.map(&:to_i).reject { |pid| pid <= 0 }
+  allowed_modes = %w[singles doubles]
+  mode = data['mode'] || params['mode'] || 'doubles'
+  mode = mode.to_s.downcase
+  mode = 'doubles' unless allowed_modes.include?(mode)
 
-  if player_ids.length != 4
-    halt 400, json_api({'error' => 'Exactly four players must be selected'})
+  raw_player_ids = if data.key?('player_ids')
+    data['player_ids']
+  else
+    [params['player1'], params['player2'], params['player3'], params['player4']]
   end
 
-  if player_ids.uniq.length != 4
+  player_ids = Array(raw_player_ids).map do |value|
+    next nil if value.nil? || value == ''
+    begin
+      Integer(value)
+    rescue ArgumentError, TypeError
+      nil
+    end
+  end
+  player_ids.fill(nil, player_ids.length...4)
+  player_ids = player_ids.first(4)
+
+  present_player_ids = player_ids.compact
+
+  required_count = mode == 'singles' ? 2 : 4
+  if present_player_ids.length != required_count
+    message = if mode == 'singles'
+      'Singles quick matches require exactly two players.'
+    else
+      'Doubles quick matches require exactly four players.'
+    end
+    halt 400, json_api({'error' => message})
+  end
+
+  if present_player_ids.uniq.length != present_player_ids.length
     halt 400, json_api({'error' => 'Each player must be unique'})
+  end
+
+  if mode == 'singles'
+    yellow_player = present_player_ids[0]
+    black_player = present_player_ids[1]
+    player_ids = [yellow_player, nil, black_player, nil]
   end
 
   halt 404, json_api({'error' => 'Division not found'}) unless DataModel::Division.get(division_id)
 
   player_repo = PlayerRepository.new
   players_by_id = player_repo.get_all_players_by_id
-  missing_players = player_ids.reject { |pid| players_by_id.key?(pid) }
+  missing_players = present_player_ids.reject { |pid| players_by_id.key?(pid) }
   unless missing_players.empty?
     halt 400, json_api({'error' => 'Unknown player ids', 'missing' => missing_players})
   end
 
   match_repo = MatchRepository.new
   begin
-    match = match_repo.create_quick_match(division_id: division_id, players: player_ids)
+    match = match_repo.create_quick_match(division_id: division_id, players: player_ids, mode: mode)
   rescue ArgumentError => e
     halt 400, json_api({'error' => e.message})
   end
