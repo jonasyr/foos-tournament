@@ -377,27 +377,25 @@ get '/api/get_open_matches' do
     division_data[:matches] = []
     open_matches = d.get_open_matches()
     open_matches.each do |m|
-      name1 = players[m.players[0]].name
-      name2 = players[m.players[1]].name
-      name3 = players[m.players[2]].name
-      name4 = players[m.players[3]].name
-      match_data = {
-        :id => m.id,
-        :round => m.round,
-        :player_ids => m.players,
-        :players => [name1, name2, name3, name4],
-        :submatches => [
-          [[name1, name2], [name3, name4]],
-          [[name1, name3], [name2, name4]],
-          [[name1, name4], [name2, name3]],
-        ]
-      }
-      division_data[:matches] << match_data
+      division_data[:matches] << serialize_open_match(m, players)
     end
     response << division_data
   end
 
   json_api(response)
+end
+
+get '/api/get_quick_match/:id' do
+  match_repo = MatchRepository.new()
+  player_repo = PlayerRepository.new
+
+  content_type :json
+  match = match_repo.get(params[:id].to_i)
+  halt 404, json_api({ error: 'match not found' }) unless match
+  halt 404, json_api({ error: 'not a quick match' }) unless match.quick_match?
+
+  players = player_repo.get_all_players_by_id()
+  json_api(serialize_open_match(match, players))
 end
 
 before '/api/set_*' do
@@ -633,13 +631,72 @@ post '/api/create_quick_match' do
   json_api({'result' => 'Match created', 'match' => match2api(match)})
 end
 
+def serialize_open_match(match, players_by_id)
+  player_ids = (match.players || []).dup
+  player_names = player_ids.map do |pid|
+    if pid && players_by_id[pid]
+      players_by_id[pid].name
+    else
+      nil
+    end
+  end
+
+  yellow_ids = player_ids[0..1] || []
+  black_ids = player_ids[2..3] || []
+  yellow_names = player_names[0..1] || []
+  black_names = player_names[2..3] || []
+
+  teams = {
+    :yellow => {
+      :ids => yellow_ids.compact,
+      :names => yellow_names.compact
+    },
+    :black => {
+      :ids => black_ids.compact,
+      :names => black_names.compact
+    }
+  }
+
+  data = {
+    :id => match.id,
+    :division_id => match.division_id,
+    :round => match.round,
+    :player_ids => player_ids,
+    :players => player_names,
+    :mode => match.mode || 'standard',
+    :quick_match => match.quick_match?,
+    :teams => teams
+  }
+
+  data[:target_score] = match.target_score if match.target_score
+
+  unless match.quick_match?
+    # League matches: Include all 3 submatch pairings for display
+    default_name = 'TBD'
+    name1 = player_names[0] || default_name
+    name2 = player_names[1] || default_name
+    name3 = player_names[2] || default_name
+    name4 = player_names[3] || default_name
+    data[:submatches] = [
+      [[name1, name2], [name3, name4]],
+      [[name1, name3], [name2, name4]],
+      [[name1, name4], [name2, name3]],
+    ]
+  end
+
+  data
+end
+
 def match2api(m)
   response = {
     'id' => m.id,
     'division_id' => m.division_id,
     'round' => m.round,
-    'players' => m.players
+    'players' => m.players,
+    'mode' => m.mode || 'standard',
+    'quick_match' => m.quick_match?
   }
+  response['target_score'] = m.target_score if m.target_score
   if m.played?
     response['played'] = true
     response['scores'] = m.scores
