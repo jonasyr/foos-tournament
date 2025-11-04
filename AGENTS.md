@@ -368,9 +368,121 @@ ALTER TABLE matches ADD COLUMN target_score INTEGER DEFAULT 10;
 3. For league matches: play best-of-3 with rotation
 4. Use `target_score` for victory condition (default: 10)
 
-### Future Work (Steps 5-8)
-- **Step 5:** Enhanced player validation and duplicate prevention in UI
-- **Step 6:** Separate quick match statistics in division views and reports
+### Implementation Status
+
+**✅ Completed Steps:**
+- **Step 1-3:** Database schema, web UI, flexible match handling, API integration
+- **Step 4:** Result processing for variable modes (flexible `final_score()` in stats.rb)
+- **Step 5:** Enhanced player validation and simulator robustness
+- **Step 6:** Stats reporting & history integration with scope filtering
+
+**⏳ Future Work (Steps 7-8):**
 - **Step 7:** Hook manager integration for quick match events
 - **Step 8:** Persistent UI preferences for frequent player pairings
+
+### Step 4: Result Processing (Completed)
+**File:** `stats.rb`
+- Refactored `final_score()` to count wins from available submatches (1-3) instead of hardcoded 3
+- Works seamlessly with both Quick Match (1 submatch) and Best-of-3 (3 submatches)
+- Maintains backward compatibility with existing ELO calculations
+
+```ruby
+def self.final_score(m)
+  scores = []
+  scores << [m.score1a, m.score1b] if m.score1a && m.score1b
+  scores << [m.score2a, m.score2b] if m.score2a && m.score2b
+  scores << [m.score3a, m.score3b] if m.score3a && m.score3b
+  
+  yellow_wins = black_wins = 0
+  scores.each { |y, b| y > b ? yellow_wins += 1 : black_wins += 1 }
+  [yellow_wins, black_wins]
+end
+```
+
+### Step 5: Player Validation (Completed)
+**Files:** `match_repository.rb`, `web_router.rb`, `views/simulator.erb`, `public/js/foos.js`
+
+**Repository-Level Validation:**
+- Added `validate_match_entity!` method enforcing:
+  * Exactly 4 player slots
+  * No NIL values
+  * No duplicate player IDs
+- Called automatically on `add()` and `update()`
+
+**API Validation (`POST /api/matches`):**
+- Mode validation: Only 'doubles' supported (`ALLOWED_MATCH_MODES` constant)
+- Team size enforcement: Each team must have exactly 2 players
+- Blank name detection
+- Duplicate detection: Normalizes to `"id:X"` or `"name:Y"` before uniqueness check
+- Returns HTTP 422 with descriptive error messages
+
+**Simulator Robustness:**
+- Shows "TBD" for missing players instead of crashing
+- Detects incomplete or duplicate lineups
+- Disables all controls when lineup invalid
+- Displays warning message:
+  * "Not enough players assigned..." (missing players)
+  * "Each player can only appear once..." (duplicates)
+- JavaScript prevents interaction with disabled controls
+
+### Step 6: Stats Reporting & History (Completed)
+**Files:** `stats.rb`, `web_router.rb`, `views/division.erb`, `views/history.erb`, `public/js/foos.js`, `public/css/foos.css`
+
+**Scope-Aware Statistics:**
+- Added `MATCH_SCOPES` constant: `{all: nil, league: false, quick: true}`
+- All Stats methods support `scope:` parameter:
+  * `leaderboard(scope: :quick)` - ELO rankings for quick matches only
+  * `player_detail(scope: :league)` - Player stats excluding quick matches
+  * `h2h(scope: :all)` - Head-to-head including all match types
+  * `partnerships(scope: :quick)` - Partner stats for quick matches
+- Helper methods for robust filtering:
+  * `normalize_scope(scope)` - Converts string/symbol to valid scope
+  * `apply_scope(matches, scope)` - Filters DataMapper queries or arrays
+  * `matches_to_array(matches)` - Safe conversion from DataMapper collection
+  * `match_quick?(match)` - Detects quick match via `quick_match?` or `quick_match` attribute
+  * `quick_flag_supported?` - Schema detection with caching
+
+**API Enhancements:**
+```ruby
+# All stats endpoints accept optional scope parameter
+GET /api/stats/leaderboard?scope=quick       # Only quick matches
+GET /api/stats/players/:id?scope=league      # Only league matches
+GET /api/stats/h2h?a=1&b=2&scope=all         # All match types (default)
+GET /api/stats/partnerships/:id?scope=quick  # Quick match partners only
+```
+
+**UI Features:**
+- **Quick Match Badge:** ⚡️ icon (`glyphicon-flash`) in yellow Bootstrap label appears next to quick matches
+- **Filter Toolbar:** Three buttons (Alle/Nur Liga/Nur Quick) to dynamically show/hide matches
+- **JavaScript Filtering:**
+  * `init_match_scope_filter()` - Binds click handlers to filter buttons
+  * `apply_match_scope_filter(scope)` - Shows/hides rows based on `data-quick-match` attribute
+  * Empty state message when filter returns no results
+- **CSS Styling:**
+  * `.match-type-label` - Badge spacing and display
+  * `.match-scope-toolbar` - Toolbar layout with clearfix
+  * `.quick-match-indicator` - History modal icon styling
+- **History Modal:** Quick Match indicator (⚡️) appears in classification history
+
+**Data Attributes:**
+```erb
+<tr data-quick-match="<%= match.quick_match? ? 'true' : 'false' %>">
+  <td>
+    <% if match.quick_match? %>
+      <span class="label label-warning match-type-label" title="Quick Match">
+        <span class="glyphicon glyphicon-flash" aria-hidden="true"></span>
+      </span>
+    <% end %>
+    <%= match.get_time() %>
+  </td>
+  ...
+</tr>
+```
+
+**Benefits:**
+- Quick matches fully integrated into all reports
+- Users can filter view without page reload
+- External apps can query specific match types via API
+- Visual distinction makes match types immediately recognizable
+- Backward compatible: default scope is `:all`
 
