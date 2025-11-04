@@ -809,8 +809,28 @@ def serialize_open_match(match, players_by_id)
 
   data[:target_score] = match.target_score if match.target_score
 
-  unless match.quick_match?
-    # League matches: Include all 3 submatch pairings for display
+  # Generate submatches based on match type
+  if match.quick_match?
+    # Quick matches: Generate submatches based on mode and win_condition
+    submatch_count = (match.win_condition == 'best_of') ? 3 : 1
+    
+    if match.mode == 'singles'
+      # Singles: 1v1 format, filter out nil players
+      p1 = player_names.compact[0]
+      p2 = player_names.compact[1]
+      base_submatch = [[p1], [p2]]
+    else
+      # Doubles: 2v2 format (default for quick matches)
+      base_submatch = [
+        player_names[0..1].compact,
+        player_names[2..3].compact
+      ]
+    end
+    
+    # Repeat submatch for best-of-3, or single submatch for score_limit
+    data[:submatches] = Array.new(submatch_count) { base_submatch }
+  else
+    # Traditional league matches: 3 rotation pairings
     default_name = 'TBD'
     name1 = player_names[0] || default_name
     name2 = player_names[1] || default_name
