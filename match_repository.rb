@@ -23,6 +23,7 @@ def get_recently_finished_matches(division_ids, limit)
 end
 
 def update(match_entity)
+  validate_match_entity!(match_entity)
   match_id = match_entity.id
   match_record = DataModel::Match.get(match_id)
   map_entity_to_record(match_entity, match_record)
@@ -30,6 +31,7 @@ def update(match_entity)
 end
 
 def add(match_entity)
+  validate_match_entity!(match_entity)
   match_record = DataModel::Match.new()
   map_entity_to_record(match_entity, match_record)
   match_record.save
@@ -129,6 +131,21 @@ def map_entity_to_record(match_entity, match_record)
     time = Time.now() if time == nil
     match_record.time = time
     match_record.duration = match_entity.duration
+  end
+end
+
+def validate_match_entity!(match_entity)
+  players = match_entity.players
+  unless players.is_a?(Array) && players.length == 4
+    raise ArgumentError, 'Match must contain exactly four player slots'
+  end
+
+  if players.any?(&:nil?)
+    raise ArgumentError, 'Match players must all be present'
+  end
+
+  if players.uniq.length != players.length
+    raise ArgumentError, 'Match players must be unique'
   end
 end
 

@@ -271,11 +271,14 @@ function load_simulator_modal(match_id) {
 }
 
 function on_load_simulator_modal() {
-	$(".result-selector").click(select_result);
-    $(".result-direct").click(select_result_direct);
+	$(".result-selector").not('[aria-disabled="true"]').click(select_result);
+    $(".result-direct").not(':disabled').click(select_result_direct);
 }
 
 function select_result() {
+    if ($(this).is('[aria-disabled="true"]') || $(this).closest('li').hasClass('disabled')) {
+        return false;
+    }
 	submatch = $(this).data('submatch');
     result_a = $(this).data('result-a');
     result_b = $(this).data('result-b');
@@ -286,6 +289,9 @@ function select_result() {
 }
 
 function select_result_direct() {
+    if ($(this).is(':disabled')) {
+        return false;
+    }
 	player = $(this).data("player");
 	result_direct = $(this).data("result-direct");
 	// FIXME: This if/else sequence could obviously be made
@@ -336,6 +342,9 @@ function update_selected_result(submatch, result_a, result_b) {
 }
 
 function run_simulation() {
+    if ($("#simulation-data").data('disabled')) {
+        return false;
+    }
     if ($("#result-selected-1").data("valid") != 1 &&
         $("#result-selected-2").data("valid") != 1 &&
         $("#result-selected-3").data("valid") != 1) {

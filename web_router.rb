@@ -13,6 +13,10 @@ require 'player_repository'
 require 'result_processor'
 require 'hook_manager'
 
+ALLOWED_MATCH_MODES = {
+  'doubles' => 2
+}.freeze
+
 # Disable Rack protection for LAN development (allows API calls from localhost and LAN hostnames)
 # This must come AFTER all requires to ensure config_file doesn't override it
 set :protection, except: [:host_authorization, :json_csrf, :remote_token]
@@ -160,7 +164,26 @@ get '/ajax/simulator/:match' do
   @players = player_repo.get_all_players_by_id()
 
   @match_players = match.players
-  match_player_names = @match_players.map { |x| @players[x].name }
+  match_player_names = @match_players.map do |player_id|
+    player = @players[player_id]
+    player ? player.name : nil
+  end
+
+  present_players = @match_players.compact
+  missing_players = match_player_names.any?(&:nil?)
+  duplicated_players = present_players.uniq.length != present_players.length
+  @simulator_disabled = missing_players || duplicated_players
+  @simulator_error = if missing_players
+    'Not enough players are assigned to this match yet. Assign both teams to enable the simulator.'
+  elsif duplicated_players
+    'Each player can only appear once in the lineup. Please adjust the teams before running the simulator.'
+  else
+    nil
+  end
+
+  safe_name = lambda do |idx|
+    match_player_names[idx] || 'TBD'
+  end
 
   @classification = division.get_current_classification()
   @classification.each do |c|
@@ -177,24 +200,24 @@ get '/ajax/simulator/:match' do
   @submatches = [
     {
       :idx => 1,
-      :player1a => match_player_names[0],
-      :player1b => match_player_names[1],
-      :player2a => match_player_names[2],
-      :player2b => match_player_names[3],
+      :player1a => safe_name.call(0),
+      :player1b => safe_name.call(1),
+      :player2a => safe_name.call(2),
+      :player2b => safe_name.call(3),
     },
     {
       :idx => 2,
-      :player1a => match_player_names[0],
-      :player1b => match_player_names[2],
-      :player2a => match_player_names[1],
-      :player2b => match_player_names[3],
+      :player1a => safe_name.call(0),
+      :player1b => safe_name.call(2),
+      :player2a => safe_name.call(1),
+      :player2b => safe_name.call(3),
     },
     {
       :idx => 3,
-      :player1a => match_player_names[0],
-      :player1b => match_player_names[3],
-      :player2a => match_player_names[1],
-      :player2b => match_player_names[2],
+      :player1a => safe_name.call(0),
+      :player1b => safe_name.call(3),
+      :player2a => safe_name.call(1),
+      :player2b => safe_name.call(2),
     }
   ]
 
@@ -454,14 +477,45 @@ post '/api/matches' do
   season = DataModel::Season.first(:status => 1) || DataModel::Season.first
   halt 400, {error: 'no season'}.to_json unless season
 
+  mode = (p['mode'] || 'doubles').to_s
+  team_size = ALLOWED_MATCH_MODES[mode]
+  halt 422, {error: 'unsupported mode'}.to_json unless team_size
+
+  player_payload = p['players']
+  halt 422, {error: 'players missing'}.to_json unless player_payload.is_a?(Hash)
+
+  yellow_raw = player_payload['yellow']
+  black_raw = player_payload['black']
+  yellow_raw = yellow_raw.is_a?(Array) ? yellow_raw.compact : []
+  black_raw = black_raw.is_a?(Array) ? black_raw.compact : []
+
+  if yellow_raw.length != team_size || black_raw.length != team_size
+    halt 422, {error: "each team must have #{team_size} players"}.to_json
+  end
+
+  if (yellow_raw + black_raw).any? { |value| value.respond_to?(:strip) && value.strip.empty? }
+    halt 422, {error: 'player names must not be blank'}.to_json
+  end
+
+  normalized = (yellow_raw + black_raw).map do |value|
+    if value.is_a?(Integer)
+      "id:#{value}"
+    else
+      "name:#{value.to_s.strip.downcase}"
+    end
+  end
+  if normalized.uniq.length != normalized.length
+    halt 422, {error: 'players must be unique'}.to_json
+  end
+
   # Find or create players by name
   def ensure_player(x)
     return DataModel::Player.get(x) if x.is_a?(Integer)
     DataModel::Player.first(:name => x) || DataModel::Player.create(:name => x)
   end
-  
-  y = (p.dig('players', 'yellow') || []).map { |n| ensure_player(n) }
-  b = (p.dig('players', 'black') || []).map { |n| ensure_player(n) }
+
+  y = yellow_raw.map { |n| ensure_player(n) }
+  b = black_raw.map { |n| ensure_player(n) }
 
   # Find the first division in the season
   division = season.divisions.first
