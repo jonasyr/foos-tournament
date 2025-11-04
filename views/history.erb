@@ -3,20 +3,24 @@
 
 <% player_name = lambda do |player_id|
      player = player_id && @players[player_id]
-     player ? player.name : '—'
+     player&.name || '—'
    end %>
-<% for i in 0...(@classification_history.length) %>
-<% quick = if @classification_history[i][:match].respond_to?(:quick_match?)
-            @classification_history[i][:match].quick_match?
-          elsif @classification_history[i][:match].respond_to?(:quick_match)
-            @classification_history[i][:match].quick_match
+<% @classification_history.each_with_index do |entry, index| %>
+<% match = entry[:match] %>
+<% quick = if match.respond_to?(:quick_match?)
+            match.quick_match?
+          elsif match.respond_to?(:quick_match)
+            match.quick_match
           else
             false
           end %>
-<div class="classification-history col-md-12" id="classification-history-<%= i+1 %>" data-match-id="<%= @classification_history[i][:match].id %>" data-step="<%= i+1 %>" data-quick-match="<%= quick ? 'true' : 'false' %>" style="display: none">
+<% highlight_map = entry[:highlight] || {} %>
+<% player_slots = match.players.each_with_index.map { |pid, idx| { id: pid, index: idx } }.reject { |slot| slot[:id].nil? } %>
+<% victories = Array(match.victories) %>
+<div class="classification-history col-md-12" id="classification-history-<%= index + 1 %>" data-match-id="<%= match.id %>" data-step="<%= index + 1 %>" data-quick-match="<%= quick ? 'true' : 'false' %>" style="display: none">
 
 <div class="col-md-4">
-<p class="text-center"><%= i+1 %>/<%= @classification_history.length %></p>
+<p class="text-center"><%= index + 1 %>/<%= @classification_history.length %></p>
 <% if quick %>
 <p class="text-center text-warning quick-match-indicator"><span class="glyphicon glyphicon-flash" aria-hidden="true"></span><span class="sr-only">Quick Match</span></p>
 <% end %>
@@ -31,14 +35,11 @@
 <th class="text-center col-md-6">Player</th>
 <th class="text-center col-md-6"># Wins</th>
 </tr>
-<% (0..3).each do |p| %>
-<% if @classification_history[i][:highlight].key?(@classification_history[i][:match].players[p]) %>
-<tr class="active">
-<% else %>
-<tr>
-<% end %>
-<td class="text-center"><%= player_name.call(@classification_history[i][:match].players[p]) %></td>
-<td class="text-center"><%= @classification_history[i][:match].victories[p] %></td>
+<% player_slots.each do |slot| %>
+<% highlight_class = highlight_map.key?(slot[:id]) ? 'active' : '' %>
+<tr class="<%= highlight_class %>">
+<td class="text-center"><%= player_name.call(slot[:id]) %></td>
+<td class="text-center"><%= victories[slot[:index]] || '—' %></td>
 </tr>
 <% end %>
 </table>
@@ -46,13 +47,13 @@
 
 <div class="col-md-4">
 <table class="table table-super-condensed table-borderless">
-<% @classification_history[i][:before].each do |c| %>
-<% if @classification_history[i][:highlight].key?(c[:player_id]) %>
+<% entry[:before].each do |c| %>
+<% if highlight_map.key?(c[:player_id]) %>
 <tr class="active">
 <% else %>
 <tr>
 <% end %>
-<td><%= @players[c[:player_id]].name %></td>
+<td><%= player_name.call(c[:player_id]) %></td>
 <td><span title="<%= "#{'%.2f' % c[:points]}" %>"><%= "#{'%.0f' % c[:points]}" %></span></td>
 </tr>
 <% end %>
@@ -61,19 +62,19 @@
 
 <div class="col-md-4">
 <table class="table table-super-condensed table-borderless">
-<% @classification_history[i][:after].each do |c| %>
-<% if @classification_history[i][:highlight].key?(c[:player_id]) %>
-<% if @classification_history[i][:highlight][c[:player_id]] == :up %>
+<% entry[:after].each do |c| %>
+<% if highlight_map.key?(c[:player_id]) %>
+<% if highlight_map[c[:player_id]] == :up %>
 <tr class="classification-up">
-<% elsif @classification_history[i][:highlight][c[:player_id]] == :down %>
+<% elsif highlight_map[c[:player_id]] == :down %>
 <tr class="classification-down">
-<% elsif @classification_history[i][:highlight][c[:player_id]] == :equal %>
+<% elsif highlight_map[c[:player_id]] == :equal %>
 <tr class="active">
 <% end %>
 <% else %>
 <tr>
 <% end %>
-<td><%= @players[c[:player_id]].name %></td>
+<td><%= player_name.call(c[:player_id]) %></td>
 <td><span title="<%= "#{'%.2f' % c[:points]}" %>"><%= "#{'%.0f' % c[:points]}" %></span></td>
 </tr>
 <% end %>
