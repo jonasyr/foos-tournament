@@ -306,8 +306,9 @@ ruby web_router.rb
 * **Match Data Model:**
   * Matches have 4 players: pl1, pl2, pl3, pl4 (player IDs)
   * Scores stored as: score1a/score1b (submatch 1), score2a/score2b (submatch 2), score3a/score3b (submatch 3)
-  * Status: 1=open/scheduled, 2=played/finished, other=cancelled
-  * **Current limitation:** `get_submatches()` assumes 3 submatches (best-of-3 format); Foos sends best-of-10 single game
+  * Status: 0=pending, 1=cancelled, 2=played/finished
+  * Quick match fields: `quick_match` (Boolean), `mode` (String), `win_condition` (String), `target_score` (Integer)
+  * `match.quick_match?` returns true for ad-hoc matches; `get_submatches()` adapts (1 vs 3 games)
 * **Division Analysis:**
   * Division classification computed via `division.rb` `analyse()` method
   * Requires all players in `divisionplayers` table to initialize `one2one` hash
@@ -341,11 +342,11 @@ Added four new columns to `matches` table:
 ### Important Implementation Details
 1. **Round field must be set to 0 (not NULL)** for quick matches to appear immediately in pending matches list. NULL values cause runtime display issues due to division caching.
 2. **Migration challenges:** Ruby 3.3 compatibility issues with old DataMapper/Bundler versions (Fixnum constant removed, `untaint` method removed). Solution: Direct SQLite `ALTER TABLE` commands instead of `dm/upgrade_model.rb`.
-3. **Current limitation:** Quick matches must be played as Best-of-3 (like regular league matches) because:
-   - Foos client expects 3 submatches structure
-   - `result_processor.rb` assumes exactly 3 score pairs
-   - `match.rb` `calculate_victories()` hardcoded for 3 submatches
-4. **Statistics integration:** Quick matches tracked with same stats as league matches; `quick_match` flag allows future filtering/separation in reports.
+3. **Match flexibility (Step 3 complete):** `match.rb` now supports both single-game (Quick Match) and best-of-3 (League) via `quick_match?` method:
+   - `get_submatches()` returns 1 or 3 submatches depending on mode
+   - `calculate_victories()` adapts logic accordingly
+   - `set_scores()` validates 1-3 score pairs robustly
+4. **Statistics integration:** Quick matches automatically excluded from league stats via early return in `division.rb#analyse_match()`; separate tracking possible via `quick_match` flag.
 
 ### Migration SQL (for reference)
 ```sql
@@ -355,9 +356,19 @@ ALTER TABLE matches ADD COLUMN win_condition VARCHAR(50) DEFAULT 'score_limit';
 ALTER TABLE matches ADD COLUMN target_score INTEGER DEFAULT 10;
 ```
 
-### Future Work (Steps 3-8)
-- **Step 3:** Expose quick match metadata in `/api/get_open_matches` for Foos client
-- **Step 4:** Enable result processor to handle variable submatch counts (single-game support)
+### API Integration (Step 3 Complete)
+**Enhanced endpoints for Foos client:**
+- **`/api/get_open_matches`:** Returns matches with `mode`, `quick_match`, `target_score`, and `teams` structure (`:yellow`/`:black` with IDs and names). League matches include `submatches` array; quick matches omit it.
+- **`/api/get_quick_match/:id`:** Dedicated endpoint for immediate retrieval after creation.
+- **Result handling:** `result_processor.rb` accepts 1-3 score pairs; timestamps optional.
+
+**Foos client requirements:**
+1. Check `quick_match` flag in match payload
+2. For quick matches: play single game (Yellow team vs Black team)
+3. For league matches: play best-of-3 with rotation
+4. Use `target_score` for victory condition (default: 10)
+
+### Future Work (Steps 5-8)
 - **Step 5:** Enhanced player validation and duplicate prevention in UI
 - **Step 6:** Separate quick match statistics in division views and reports
 - **Step 7:** Hook manager integration for quick match events
