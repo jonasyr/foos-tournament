@@ -815,15 +815,16 @@ def serialize_open_match(match, players_by_id)
     submatch_count = (match.win_condition == 'best_of') ? 3 : 1
     
     if match.mode == 'singles'
-      # Singles: 1v1 format, filter out nil players
-      p1 = player_names.compact[0]
-      p2 = player_names.compact[1]
-      base_submatch = [[p1], [p2]]
+      # Singles: 1v1 format, use team data (already filtered for nil)
+      base_submatch = [
+        yellow_names.compact,
+        black_names.compact
+      ]
     else
       # Doubles: 2v2 format (default for quick matches)
       base_submatch = [
-        player_names[0..1].compact,
-        player_names[2..3].compact
+        yellow_names.compact,
+        black_names.compact
       ]
     end
     
