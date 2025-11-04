@@ -1,3 +1,55 @@
+# Represents a scheduled or completed foosball match.
+#
+# The entity stores the four participating players, metadata about the match
+# configuration (quick match mode, win conditions, score targets), and the
+# recorded scores for every submatch. Instances are created by repositories and
+# passed around the application to avoid exposing DataMapper records to the
+# domain logic.
+#
+# Matches can be either "league" style (best-of-three across different
+# pairings) or "quick" matches (single game, optional singles mode). Utility
+# helpers below normalise inputs, expose convenience predicates, and derive
+# submatch breakdowns for reporting purposes.
+#
+# @!attribute [rw] id
+#   Unique identifier for the match, assigned by the repository once persisted.
+#   @return [Integer, nil]
+# @!attribute [r] division_id
+#   Identifier of the division the match belongs to.
+#   @return [Integer]
+# @!attribute [r] round
+#   Sequential round number. Quick matches use round zero.
+#   @return [Integer]
+# @!attribute [r] players
+#   Array of player identifiers stored in fixed order [pl1, pl2, pl3, pl4].
+#   @return [Array<Integer, nil>]
+# @!attribute [r] scores
+#   Array of score pairs, one per submatch. Empty until results are set.
+#   @return [Array<Array<Integer>>]
+# @!attribute [r] victories
+#   Cached victory counts per player, recalculated when scores change.
+#   @return [Array<Integer>]
+# @!attribute [r] status
+#   Status flag: 0 pending, 1 cancelled, 2 played.
+#   @return [Integer]
+# @!attribute [r] time
+#   Timestamp of when the match was played.
+#   @return [Time, nil]
+# @!attribute [r] duration
+#   Match duration in seconds.
+#   @return [Integer, nil]
+# @!attribute [r] quick_match
+#   Raw quick match flag used by persistence layer.
+#   @return [Boolean]
+# @!attribute [r] mode
+#   Match mode, e.g. "standard", "doubles", or "singles" for quick matches.
+#   @return [String]
+# @!attribute [r] win_condition
+#   Strategy describing how winners are determined.
+#   @return [String]
+# @!attribute [r] target_score
+#   Target score for quick matches.
+#   @return [Integer]
 class Match
 
 DEFAULT_MODE = 'standard'
@@ -18,7 +70,15 @@ attr_reader :mode
 attr_reader :win_condition
 attr_reader :target_score
 
-def initialize(id, players, division_id, round, attributes = {})
+  # Builds a new domain match entity.
+  #
+  # @param id [Integer, nil] database identifier, nil for new matches
+  # @param players [Array<Integer, nil>] players participating in fixed slot
+  #   order; shorter arrays are padded with nils
+  # @param division_id [Integer] owning division identifier
+  # @param round [Integer] sequential round number (0 for quick matches)
+  # @param attributes [Hash] optional attributes (status, scores, metadata)
+  def initialize(id, players, division_id, round, attributes = {})
   @id = id
   @players = Array(players).dup
   @players.fill(nil, @players.length...4)
@@ -44,59 +104,107 @@ def initialize(id, players, division_id, round, attributes = {})
   set_target_score(attributes[:target_score]) if attributes.key?(:target_score)
 end
 
-def quick_match?()
-  return !!@quick_match
-end
-
-def set_quick_match(value)
-  @quick_match = !!value
-end
-
-def set_mode(value)
-  @mode = value.nil? || value == '' ? DEFAULT_MODE : value
-end
-
-def set_win_condition(value)
-  @win_condition = value.nil? || value == '' ? DEFAULT_WIN_CONDITION : value
-end
-
-def set_target_score(value)
-  if value.nil? || value == ''
-    @target_score = DEFAULT_TARGET_SCORE
-  else
-    @target_score = value.to_i
+  # Indicates whether the match is a quick match.
+  #
+  # @return [Boolean] true when {#quick_match} flag is set
+  def quick_match?()
+    return !!@quick_match
   end
-end
 
-def played?()
-  return @status == 2
-end
+  # Sets quick match status, normalising to a boolean.
+  #
+  # @param value [Object] truthy/falsy value coming from persistence
+  # @return [void]
+  def set_quick_match(value)
+    @quick_match = !!value
+  end
 
-def cancelled?()
-  return @status == 1
-end
+  # Configures the match mode, defaulting to {DEFAULT_MODE} when blank.
+  #
+  # @param value [String, nil]
+  # @return [void]
+  def set_mode(value)
+    @mode = value.nil? || value == '' ? DEFAULT_MODE : value
+  end
 
-def set_status(status)
-  @status = status
-end
+  # Configures the win condition for the match.
+  #
+  # @param value [String, nil]
+  # @return [void]
+  def set_win_condition(value)
+    @win_condition = value.nil? || value == '' ? DEFAULT_WIN_CONDITION : value
+  end
 
-def set_played_stats(time, duration)
-  @time = time
-  @duration = duration
-end
-
-def set_scores(scores)
-  @scores = []
-  if scores
-    scores.each do |score|
-      next unless score.is_a?(Array) && score.length >= 2
-      @scores << [score[0], score[1]]
+  # Sets the target score for quick matches, defaulting when blank.
+  #
+  # @param value [String, Integer, nil]
+  # @return [void]
+  def set_target_score(value)
+    if value.nil? || value == ''
+      @target_score = DEFAULT_TARGET_SCORE
+    else
+      @target_score = value.to_i
     end
   end
-  calculate_victories()
-end
 
-def calculate_victories()
+  # Checks whether the match has been played.
+  #
+  # @return [Boolean] true when {#status} equals 2
+  def played?()
+    return @status == 2
+  end
+
+  # Checks whether the match has been cancelled.
+  #
+  # @return [Boolean] true when {#status} equals 1
+  def cancelled?()
+    return @status == 1
+  end
+
+  # Updates the stored status code.
+  #
+  # @param status [Integer]
+  # @return [void]
+  def set_status(status)
+    @status = status
+  end
+
+  # Records timing information for a played match.
+  #
+  # @param time [Time, nil] timestamp of the match
+  # @param duration [Integer, nil] duration in seconds
+  # @return [void]
+  def set_played_stats(time, duration)
+    @time = time
+    @duration = duration
+  end
+
+  # Stores raw submatch score data.
+  #
+  # Invalid entries are ignored to preserve backwards compatibility with older
+  # result payloads. Once updated the cached victory counts are recalculated.
+  #
+  # @param scores [Array<Array<Integer>>] array of score pairs
+  # @return [void]
+  def set_scores(scores)
+    @scores = []
+    if scores
+      scores.each do |score|
+        next unless score.is_a?(Array) && score.length >= 2
+        @scores << [score[0], score[1]]
+      end
+    end
+    calculate_victories()
+  end
+
+  # Recomputes the cached victories per player.
+  #
+  # Quick matches treat the first two players as a team against the last two,
+  # whereas league matches evaluate all three submatches following the
+  # historical format used by the foosball league.
+  #
+  # @return [void]
+  def calculate_victories()
   @victories = [0, 0, 0, 0]
   return if @scores.nil? || @scores.empty?
 
@@ -130,22 +238,32 @@ def calculate_victories()
 end
 
 # FIXME: The human version should be generated in FE, not here
-def get_time()
-  return @time.strftime("%Y/%m/%d %H:%M")
-end
+  # Formats the stored {#time} for human-readable output.
+  #
+  # @return [String] timestamp formatted as `YYYY/MM/DD HH:MM`
+  def get_time()
+    return @time.strftime("%Y/%m/%d %H:%M")
+  end
 
 # FIXME: The human version should be generated in FE, not here
-def get_duration()
-  if @duration
-    duration_human = "%02d:%02d" % [@duration / 60, @duration % 60]
-  else
-    duration_human = "-"
+  # Formats the stored {#duration} into minutes and seconds.
+  #
+  # @return [String] formatted duration or `-` when not available
+  def get_duration()
+    if @duration
+      duration_human = "%02d:%02d" % [@duration / 60, @duration % 60]
+    else
+      duration_human = "-"
+    end
+    return duration_human
   end
-  return duration_human
-end
 
-def get_submatches()
-  return [] if @scores.nil? || @scores.empty?
+  # Returns a breakdown of submatches with participating players and scores.
+  #
+  # @return [Array<Array>] array of four-element entries describing the two
+  #   teams and the recorded score for each submatch
+  def get_submatches()
+    return [] if @scores.nil? || @scores.empty?
 
   if quick_match?
     # Single game: Yellow team vs Black team
@@ -174,9 +292,10 @@ end
 
 private
 
-def valid_score_pair?(score)
-  score.is_a?(Array) && score.length >= 2 && !score[0].nil? && !score[1].nil?
-end
+  # @return [Boolean] whether the provided score tuple is usable
+  def valid_score_pair?(score)
+    score.is_a?(Array) && score.length >= 2 && !score[0].nil? && !score[1].nil?
+  end
 
 def increment_victories(indices)
   indices.each do |idx|

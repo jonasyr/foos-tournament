@@ -1,3 +1,7 @@
+# Command-line utility that creates a new season with optional active status.
+#
+# The script loads repository classes from the project root and writes directly
+# to the configured DataMapper database.
 $LOAD_PATH << '..'
 
 require 'season_repository'

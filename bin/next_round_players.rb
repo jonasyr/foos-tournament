@@ -1,6 +1,7 @@
 # Reads a list of player_id + matches from stdin (one by line) and adds
 # an entry for those players for the next round in their division
 
+# CLI helper listing players scheduled for the next round of a division.
 $LOAD_PATH << '..'
 
 require 'season_repository'

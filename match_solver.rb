@@ -1,3 +1,9 @@
+# Heuristic solver that generates fair match combinations for a round.
+#
+# The solver explores random solutions and hill-climbs to a local optimum while
+# respecting the one-to-one confrontation matrix passed in by
+# {MatchAssigner#assign_matches}. The algorithm avoids repeated pairings within
+# the same round and attempts to minimise imbalance in player confrontations.
 class Solver
 
   @debug = false
@@ -14,10 +20,16 @@ class Solver
     6 => 100,
   }
 
+  # @param one2one [Hash{Integer=>Hash{Integer=>Integer}}] confrontation matrix
+  #   describing how many times each pair of players has faced each other
   def initialize(one2one)
     @one2one = one2one
   end
 
+  # Returns the heuristic score for a number of confrontations.
+  #
+  # @param confrontations [Integer]
+  # @return [Integer]
   def get_one2one_score(confrontations)
     if @@scores_nplayed.key?(confrontations)
       return @@scores_nplayed[confrontations]
@@ -26,6 +38,12 @@ class Solver
     end
   end
 
+  # Computes the score of a proposed match based on confrontation history.
+  #
+  # @param players [Array<Integer>] four player identifiers forming a match
+  # @param one2one [Hash] confrontation matrix
+  # @param one2one_diff [Hash] temporary adjustments for local search
+  # @return [Integer] accumulated score favouring less frequent pairings
   def match_score(players, one2one, one2one_diff = {})
     score = 0
     for p in 0..2
@@ -42,6 +60,11 @@ class Solver
     return score
   end
 
+  # Builds a random, valid solution without duplicate players per match.
+  #
+  # @param player_list [Array<Integer>]
+  # @return [Array<Integer>] flattened list of players grouped by four
+  # @raise [RuntimeError] if no valid combination is found after many attempts
   def get_random_solution(player_list)
     nmatches = player_list.length / 4
     for i in 0..500000
@@ -60,6 +83,16 @@ class Solver
     raise 'Too many attempts to find a random solution with no repeated players'
   end
 
+  # Searches for a near-optimal arrangement of players into matches.
+  #
+  # The solver starts from random shuffles and iteratively improves the
+  # configuration via neighbour swaps while keeping track of the best score.
+  #
+  # @param player_list [Array<Integer>] flattened list of players (multiple of 4)
+  # @return [Array<Integer>, Integer, Hash] best solution, score, and resulting
+  #   confrontation matrix
+  # @raise [RuntimeError] if the player list size is not divisible by four or if
+  #   no feasible solution exists
   def solve(player_list)
     if player_list.length % 4 != 0
       raise 'The list of players to solve a solution is not multiple of 4'

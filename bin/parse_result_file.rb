@@ -1,3 +1,4 @@
+# CLI wrapper that feeds JSON result files into the result processor.
 $LOAD_PATH << '..'
 
 require 'json'

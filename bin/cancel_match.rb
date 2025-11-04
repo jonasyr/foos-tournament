@@ -1,3 +1,4 @@
+# CLI script to cancel a scheduled match by id.
 $LOAD_PATH << '..'
 
 require 'division_repository'

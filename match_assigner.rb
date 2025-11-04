@@ -2,11 +2,44 @@ $LOAD_PATH << '.'
 
 require 'match_solver'
 
+# Coordinates generation of new division matches based on current progress.
+#
+# The assigner analyses round configuration, pending player quotas, and
+# historical match pairings to find the next set of balanced matchups. It
+# relies on {Solver} to minimise repeated pairings while respecting per-player
+# quotas extracted from the division data.
+#
+# The workflow is:
+# 1. Inspect the target round's requirements and adjust quotas to ensure
+#    multiples of four players are scheduled.
+# 2. Build a one-to-one confrontation matrix describing previous pairings.
+# 3. Ask the {Solver} heuristic to find a set of matches that maximises the
+#    fairness score.
+# 4. Return the resulting linearised list of player identifiers grouped in
+#    chunks of four.
+#
+# The assigner prints extensive diagnostic output when {::debug=} is enabled in
+# order to support manual troubleshooting on the Raspberry Pi deployment.
 class MatchAssigner
 
-@@debug = false
+  @@debug = false
 
-def assign_matches(division)
+  # Generates the next batch of matches for the supplied division.
+  #
+  # It validates round boundaries, adjusts player quotas to achieve multiples
+  # of four, and invokes the {Solver} search heuristic to generate a feasible
+  # schedule. When no valid configuration can be produced an empty list is
+  # returned.
+  #
+  # @param division [Division] domain entity describing the division state,
+  #   including players, rounds, and already assigned matches
+  # @return [Array<Integer>] flattened array of player identifiers grouped in
+  #   fours, where every consecutive four entries describe a match
+  # @raise [RuntimeError] when all rounds are already generated or when the
+  #   division is missing configuration for the requested round
+  # @raise [RuntimeError] if {Solver} cannot produce a valid configuration with
+  #   the available players
+  def assign_matches(division)
   total_rounds = division.total_rounds
   current_round = division.current_round
   player_ids = division.get_player_ids()
@@ -157,7 +190,12 @@ def assign_matches(division)
   return solution
 end
 
-def fill_basic_one2one(players)
+  # Builds an empty one-to-one confrontation matrix for a player list.
+  #
+  # @param players [Array<Player>] players that belong to the division
+  # @return [Hash{Integer=>Hash{Integer=>Integer}}] hash keyed by player id with
+  #   nested hashes initialised to zero confrontations for every other player
+  def fill_basic_one2one(players)
   one2one = {}
   for p in players
     one2one[p.id] = {}
@@ -168,7 +206,13 @@ def fill_basic_one2one(players)
   one2one
 end
 
-def fill_one2one_with_solution(one2one, solution)
+  # Updates the confrontation matrix with matches from a solver solution.
+  #
+  # @param one2one [Hash{Integer=>Hash{Integer=>Integer}}] confrontation matrix
+  # @param solution [Array<Integer>] flattened array produced by {Solver#solve}
+  #   describing matches in groups of four player identifiers
+  # @return [void]
+  def fill_one2one_with_solution(one2one, solution)
   nmatches = solution.length / 4
   for m in 0...nmatches
     pl1 = solution[m*4]
@@ -191,7 +235,12 @@ def fill_one2one_with_solution(one2one, solution)
   end
 end
 
-def fill_one2one_with_matches(one2one, matches)
+  # Applies confrontation increments for a collection of existing matches.
+  #
+  # @param one2one [Hash{Integer=>Hash{Integer=>Integer}}] confrontation matrix
+  # @param matches [Array<Match>] list of previously scheduled matches
+  # @return [void]
+  def fill_one2one_with_matches(one2one, matches)
   for m in matches
     solution = m.players
     fill_one2one_with_solution(one2one, solution)

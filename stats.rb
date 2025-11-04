@@ -1,6 +1,13 @@
 require 'date'
 require_relative 'dm/data_model'
 
+# Collection of analytics utilities for foosball matches and players.
+#
+# The module re-computes ELO leaderboards, aggregates player statistics across
+# configurable scopes (league vs. quick matches), and exposes helper queries for
+# head-to-head records, partnerships, and goal-timeline derived metrics. All
+# functions are written in a functional style so they can be used from the web
+# app as well as CLI tooling.
 module Stats
   START_ELO = 1000
   K_FACTOR  = 24
@@ -11,6 +18,11 @@ module Stats
   }.freeze
 
   # -------- helpers
+  # Retrieves the DataMapper player records representing one side of a match.
+  #
+  # @param m [DataModel::Match] DataMapper match record
+  # @param side [Symbol] :yellow or :black side identifier
+  # @return [Array<DataModel::Player>] list of participating players
   def self.team_of_match(m, side)
     # Match has pl1, pl2, pl3, pl4
     # score1a is pl1+pl2 (yellow), score1b is pl3+pl4 (black)
@@ -24,6 +36,14 @@ module Stats
     end
   end
 
+  # Calculates the overall score for yellow vs. black teams.
+  #
+  # Works for both league matches (best-of-three submatches) and quick matches
+  # (single game). Missing submatches are ignored to stay backwards compatible
+  # with partial data imported from legacy clients.
+  #
+  # @param m [DataModel::Match]
+  # @return [Array<Integer>] `[yellow_wins, black_wins]`
   def self.final_score(m)
     # Calculate final score: Count wins from available submatches
     # Works for both Best-of-3 (3 submatches) and Quick Match (1 submatch)
@@ -46,11 +66,21 @@ module Stats
     [yellow_wins, black_wins]
   end
 
+  # Computes the average ELO rating for a list of players.
+  #
+  # @param elo_table [Hash{Integer=>Numeric}] current ELO ratings keyed by id
+  # @param players [Array<DataModel::Player>] players forming a team
+  # @return [Numeric] average ELO value or {START_ELO} if no data available
   def self.team_elo(elo_table, players)
     return START_ELO if players.empty?
     (players.map { |p| elo_table[p.id] || START_ELO }.sum / players.size.to_f)
   end
 
+  # Updates the in-memory ELO table with the outcome of a match.
+  #
+  # @param elo_table [Hash{Integer=>Numeric}] mutable rating store
+  # @param m [DataModel::Match] match whose result should be accounted for
+  # @return [Hash{Integer=>Numeric}] the same hash instance for chaining
   def self.update_elo_for_match!(elo_table, m)
     y_players = team_of_match(m, :yellow)
     b_players = team_of_match(m, :black)
@@ -71,6 +101,12 @@ module Stats
     elo_table
   end
 
+  # Builds a leaderboard sorted by ELO rating.
+  #
+  # @param season_id [Integer, nil] optional season filter
+  # @param limit [Integer] maximum number of players to return
+  # @param scope [Symbol] :all, :league, or :quick
+  # @return [Array<Hash>] ranking entries containing player id, name, and stats
   def self.leaderboard(season_id: nil, limit: 50, scope: :all)
     # recompute ELO chronologically for determinism
     conditions = season_id ? { :division => { :season_id => season_id } } : {}
@@ -101,6 +137,13 @@ module Stats
     players.sort_by { |r| -r[:elo] }.first(limit)
   end
 
+  # Provides rich statistics for a single player.
+  #
+  # @param player_id [Integer]
+  # @param window_days [Array<Integer>] rolling windows (in days) to compute
+  #   snapshot statistics for
+  # @param scope [Symbol] :all, :league, or :quick
+  # @return [Hash] aggregated metrics including totals and per-window breakdowns
   def self.player_detail(player_id:, window_days: [7, 30, 90], scope: :all)
     p = DataModel::Player.get(player_id)
     return {} unless p
@@ -118,6 +161,11 @@ module Stats
     { player_id: p.id, name: p.name }.merge(totals).merge({ windows: windows })
   end
 
+  # Returns played matches that involve the provided player.
+  #
+  # @param p [DataModel::Player]
+  # @param scope [Symbol]
+  # @return [Array<DataModel::Match>]
   def self.matches_of_player(p, scope: :all)
     # Find all matches where player participated
     matches = DataModel::Match.all(:status => 2, :conditions => [
@@ -128,6 +176,11 @@ module Stats
     matches_to_array(matches)
   end
 
+  # Aggregates wins, losses, and goal statistics for a player.
+  #
+  # @param matches [Array<DataModel::Match>]
+  # @param p [DataModel::Player]
+  # @return [Hash] metrics including win rate, goals, and streak information
   def self.reduce_totals(matches, p)
     matches = matches_to_array(matches)
     games = matches.length
@@ -170,6 +223,12 @@ module Stats
   end
 
   # ---- H2H / Partnerships (basic)
+  # Calculates head-to-head statistics for two players.
+  #
+  # @param a_id [Integer]
+  # @param b_id [Integer]
+  # @param scope [Symbol]
+  # @return [Hash] with games played, win counts, and goal differential
   def self.h2h(a_id:, b_id:, scope: :all)
     ms = DataModel::Match.all(:status => 2, :conditions => [
       '(pl1 = ? OR pl2 = ? OR pl3 = ? OR pl4 = ?) AND ' \
@@ -194,6 +253,12 @@ module Stats
   end
 
   # ---- Partnerships
+  # Lists best-performing partners for a player.
+  #
+  # @param player_id [Integer]
+  # @param limit [Integer]
+  # @param scope [Symbol]
+  # @return [Array<Hash>] sorted partnership records including win rate
   def self.partnerships(player_id:, limit: 10, scope: :all)
     p = DataModel::Player.get(player_id)
     return [] unless p
@@ -241,6 +306,10 @@ module Stats
   end
 
   # ---- Goal timeline driven metrics (clutch/comeback/close)
+  # Derives clutch/comeback metrics based on goal events for a match.
+  #
+  # @param match_id [Integer]
+  # @return [Hash] timeline indicators such as :close_game and :comeback
   def self.timeline_metrics(match_id)
     ev = DataModel::GoalEvent.all(:match_id => match_id, :order => [:id.asc])
     return {} if ev.empty?
@@ -275,11 +344,20 @@ module Stats
     }
   end
 
+  # Normalises a provided scope value into a supported symbol.
+  #
+  # @param scope [Symbol, String, nil]
+  # @return [Symbol] one of :all, :league, :quick
   def self.normalize_scope(scope)
     sym = scope.respond_to?(:to_sym) ? scope.to_sym : :all
     MATCH_SCOPES.key?(sym) ? sym : :all
   end
 
+  # Filters matches by quick/league scope.
+  #
+  # @param matches [DataMapper::Collection, Array<DataModel::Match>]
+  # @param scope [Symbol]
+  # @return [Array<DataModel::Match>] filtered matches respecting the scope
   def self.apply_scope(matches, scope)
     normalized = normalize_scope(scope)
     desired = MATCH_SCOPES[normalized]
@@ -296,6 +374,10 @@ module Stats
     matches_to_array(matches).select { |m| match_quick?(m) == desired }
   end
 
+  # Ensures the provided matches collection is converted into an array.
+  #
+  # @param matches [#to_a, Array]
+  # @return [Array<DataModel::Match>]
   def self.matches_to_array(matches)
     if matches.respond_to?(:to_a)
       matches.to_a
@@ -304,6 +386,10 @@ module Stats
     end
   end
 
+  # Detects whether a match should be considered a quick match.
+  #
+  # @param match [#quick_match?, #quick_match]
+  # @return [Boolean]
   def self.match_quick?(match)
     if match.respond_to?(:quick_match?)
       match.quick_match?
@@ -314,6 +400,9 @@ module Stats
     end
   end
 
+  # Checks whether the underlying schema exposes the quick_match column.
+  #
+  # @return [Boolean]
   def self.quick_flag_supported?
     return @quick_flag_supported unless @quick_flag_supported.nil?
 
