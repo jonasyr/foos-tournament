@@ -586,8 +586,9 @@ get '/api/stats/leaderboard' do
   limit = (params['limit'] || 50).to_i
   season_name = params['season']
   season_id = season_name ? DataModel::Season.first(:title => season_name)&.id : nil
-  
-  Stats.leaderboard(season_id: season_id, limit: limit).to_json
+  scope = Stats.normalize_scope(params['scope'] || :all)
+
+  Stats.leaderboard(season_id: season_id, limit: limit, scope: scope).to_json
 end
 
 get '/api/stats/players' do
@@ -596,22 +597,25 @@ end
 
 get '/api/stats/players/:id' do
   pid = params[:id].to_i
-  Stats.player_detail(player_id: pid).to_json
+  scope = Stats.normalize_scope(params['scope'] || :all)
+  Stats.player_detail(player_id: pid, scope: scope).to_json
 end
 
 get '/api/stats/h2h' do
   a = params['a'].to_i
   b = params['b'].to_i
   halt 400, {error: 'missing parameters a and b'}.to_json if a == 0 || b == 0
-  
-  Stats.h2h(a_id: a, b_id: b).to_json
+  scope = Stats.normalize_scope(params['scope'] || :all)
+
+  Stats.h2h(a_id: a, b_id: b, scope: scope).to_json
 end
 
 get '/api/stats/partnerships/:id' do
   pid = params[:id].to_i
   limit = (params['limit'] || 10).to_i
-  
-  Stats.partnerships(player_id: pid, limit: limit).to_json
+  scope = Stats.normalize_scope(params['scope'] || :all)
+
+  Stats.partnerships(player_id: pid, limit: limit, scope: scope).to_json
 end
 
 get '/api/stats/match/:id/timeline' do

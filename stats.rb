@@ -4,6 +4,11 @@ require_relative 'dm/data_model'
 module Stats
   START_ELO = 1000
   K_FACTOR  = 24
+  MATCH_SCOPES = {
+    all: nil,
+    league: false,
+    quick: true
+  }.freeze
 
   # -------- helpers
   def self.team_of_match(m, side)
@@ -66,10 +71,12 @@ module Stats
     elo_table
   end
 
-  def self.leaderboard(season_id: nil, limit: 50)
+  def self.leaderboard(season_id: nil, limit: 50, scope: :all)
     # recompute ELO chronologically for determinism
     conditions = season_id ? { :division => { :season_id => season_id } } : {}
     matches = DataModel::Match.all(conditions.merge(:status => 2, :order => [ :time.asc, :id.asc ]))
+    matches = apply_scope(matches, scope)
+    matches = matches_to_array(matches)
     elo = {}
     played = Hash.new(0)
     wins   = Hash.new(0)
@@ -94,32 +101,36 @@ module Stats
     players.sort_by { |r| -r[:elo] }.first(limit)
   end
 
-  def self.player_detail(player_id:, window_days: [7, 30, 90])
+  def self.player_detail(player_id:, window_days: [7, 30, 90], scope: :all)
     p = DataModel::Player.get(player_id)
     return {} unless p
 
-    ms = matches_of_player(p)
+    ms = matches_of_player(p, scope: scope)
     totals = reduce_totals(ms, p)
     windows = {}
     now = DateTime.now
     window_days.each do |d|
-      msw = ms.all(:time.gte => now - d)
+      cutoff = now - d
+      msw = ms.select { |m| m.time && m.time >= cutoff }
       windows[d] = reduce_totals(msw, p)
     end
 
     { player_id: p.id, name: p.name }.merge(totals).merge({ windows: windows })
   end
 
-  def self.matches_of_player(p)
+  def self.matches_of_player(p, scope: :all)
     # Find all matches where player participated
-    DataModel::Match.all(:status => 2, :conditions => [
+    matches = DataModel::Match.all(:status => 2, :conditions => [
       'pl1 = ? OR pl2 = ? OR pl3 = ? OR pl4 = ?',
       p.id, p.id, p.id, p.id
-    ])
+    ], :order => [:time.asc, :id.asc])
+    matches = apply_scope(matches, scope)
+    matches_to_array(matches)
   end
 
   def self.reduce_totals(matches, p)
-    games = matches.count
+    matches = matches_to_array(matches)
+    games = matches.length
     wins = 0
     goals_for = 0
     goals_against = 0
@@ -159,12 +170,14 @@ module Stats
   end
 
   # ---- H2H / Partnerships (basic)
-  def self.h2h(a_id:, b_id:)
+  def self.h2h(a_id:, b_id:, scope: :all)
     ms = DataModel::Match.all(:status => 2, :conditions => [
       '(pl1 = ? OR pl2 = ? OR pl3 = ? OR pl4 = ?) AND ' \
       '(pl1 = ? OR pl2 = ? OR pl3 = ? OR pl4 = ?)',
       a_id, a_id, a_id, a_id, b_id, b_id, b_id, b_id
-    ])
+    ], :order => [:time.asc, :id.asc])
+    ms = apply_scope(ms, scope)
+    ms = matches_to_array(ms)
     wins_a = 0
     wins_b = 0
     diff = 0
@@ -177,20 +190,22 @@ module Stats
       wins_b += 1 if op > my
       diff += (my - op)
     end
-    { a_id: a_id, b_id: b_id, games: ms.count, wins_a: wins_a, wins_b: wins_b, goal_diff_a: diff }
+    { a_id: a_id, b_id: b_id, games: ms.length, wins_a: wins_a, wins_b: wins_b, goal_diff_a: diff }
   end
 
   # ---- Partnerships
-  def self.partnerships(player_id:, limit: 10)
+  def self.partnerships(player_id:, limit: 10, scope: :all)
     p = DataModel::Player.get(player_id)
     return [] unless p
 
     partners = Hash.new { |h, k| h[k] = { games: 0, wins: 0 } }
-    
-    DataModel::Match.all(:status => 2, :conditions => [
+
+    matches = DataModel::Match.all(:status => 2, :conditions => [
       'pl1 = ? OR pl2 = ? OR pl3 = ? OR pl4 = ?',
       p.id, p.id, p.id, p.id
-    ]).each do |m|
+    ], :order => [:time.asc, :id.asc])
+    matches = apply_scope(matches, scope)
+    matches_to_array(matches).each do |m|
       y_score, b_score = final_score(m)
       
       if [m.pl1, m.pl2].include?(p.id)
@@ -258,5 +273,58 @@ module Stats
       comeback: trailed,
       clutch_finish: clutch
     }
+  end
+
+  def self.normalize_scope(scope)
+    sym = scope.respond_to?(:to_sym) ? scope.to_sym : :all
+    MATCH_SCOPES.key?(sym) ? sym : :all
+  end
+
+  def self.apply_scope(matches, scope)
+    normalized = normalize_scope(scope)
+    desired = MATCH_SCOPES[normalized]
+    return matches if desired.nil?
+
+    if quick_flag_supported? && matches.respond_to?(:all)
+      begin
+        return matches.all(:quick_match => desired)
+      rescue ArgumentError
+        # fall back to enumerable filtering below
+      end
+    end
+
+    matches_to_array(matches).select { |m| match_quick?(m) == desired }
+  end
+
+  def self.matches_to_array(matches)
+    if matches.respond_to?(:to_a)
+      matches.to_a
+    else
+      Array(matches)
+    end
+  end
+
+  def self.match_quick?(match)
+    if match.respond_to?(:quick_match?)
+      match.quick_match?
+    elsif match.respond_to?(:quick_match)
+      !!match.quick_match
+    else
+      false
+    end
+  end
+
+  def self.quick_flag_supported?
+    return @quick_flag_supported unless @quick_flag_supported.nil?
+
+    supported = false
+    if defined?(DataModel::Match) && DataModel::Match.respond_to?(:properties)
+      begin
+        supported = DataModel::Match.properties.map(&:name).include?(:quick_match)
+      rescue StandardError
+        supported = false
+      end
+    end
+    @quick_flag_supported = supported
   end
 end

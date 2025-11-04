@@ -108,10 +108,61 @@ function on_load_division_subsection() {
     $("#player-modal").on('hide.bs.modal', function (event) {
         $("#player-content").text("");
     });
+    init_match_scope_filter();
     activate_match_popovers();
     if ($("#quick-match-form").length) {
         setup_quick_match_form();
     }
+}
+
+function init_match_scope_filter() {
+    $('.match-scope-toggle').off('click').on('click', function(event) {
+        event.preventDefault();
+        scope = $(this).data('scope');
+        $('.match-scope-toggle').removeClass('active').attr('aria-pressed', 'false');
+        $(this).addClass('active').attr('aria-pressed', 'true');
+        apply_match_scope_filter(scope);
+    });
+    initial_scope = $('.match-scope-toggle.active').data('scope');
+    if (!initial_scope) {
+        initial_scope = 'all';
+    }
+    apply_match_scope_filter(initial_scope);
+}
+
+function apply_match_scope_filter(scope) {
+    allowed = ['all', 'league', 'quick'];
+    if ($.inArray(scope, allowed) === -1) {
+        scope = 'all';
+    }
+    show_quick = (scope === 'all' || scope === 'quick');
+    show_league = (scope === 'all' || scope === 'league');
+
+    $('[data-match-section]').each(function() {
+        section = $(this);
+        rows = section.find('tr[data-quick-match]');
+        if (rows.length === 0) {
+            return;
+        }
+        rows.each(function() {
+            row = $(this);
+            quick_flag = row.data('quick-match');
+            is_quick = (quick_flag === true || quick_flag === 'true' || quick_flag === 1 || quick_flag === '1');
+            if ((is_quick && show_quick) || (!is_quick && show_league)) {
+                row.show();
+            } else {
+                row.hide();
+            }
+        });
+        total_rows = rows.length;
+        visible_rows = rows.filter(':visible').length;
+        empty_row = section.find('.match-filter-empty-dynamic');
+        if (total_rows > 0 && visible_rows === 0) {
+            empty_row.show();
+        } else {
+            empty_row.hide();
+        }
+    });
 }
 
 function activate_player_rivals() {
