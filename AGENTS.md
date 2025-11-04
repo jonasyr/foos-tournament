@@ -213,6 +213,33 @@ mkdir -p /home/pi/foos-project/foos-tournament/results
 * **Cause:** Players not added to `divisionplayers` table, so `get_player_ids()` returned empty array
 * **Fix:** Must associate players with divisions via `divisionplayers` table (see Creating Test Data above)
 
+#### 6. Database Migration Complications (Ruby 3.3 + Old Gems)
+
+* **Issue:** `ruby dm/upgrade_model.rb` fails with compatibility errors:
+  * `uninitialized constant JSON::Fragment` (json_pure 1.8.6 incompatible with Ruby 3.3)
+  * `undefined method 'untaint'` (Bundler 1.14.5 uses removed method)
+  * `uninitialized constant Fixnum` (DataObjects 0.10.17 uses deprecated constant)
+* **Root Cause:** Legacy gems (DataMapper, json_pure 1.8.6) not compatible with Ruby 3.3+
+* **Workaround:** Use direct SQLite ALTER TABLE commands instead of DataMapper auto_upgrade:
+
+```bash
+cd /home/pi/foos-project/foos-tournament
+sqlite3 tournament.db "ALTER TABLE matches ADD COLUMN quick_match BOOLEAN DEFAULT 0;"
+sqlite3 tournament.db "ALTER TABLE matches ADD COLUMN mode VARCHAR(50) DEFAULT 'standard';"
+# Verify: sqlite3 tournament.db "PRAGMA table_info(matches);"
+```
+
+* **Long-term Solution:** Upgrade to modern ORM (Sequel, ActiveRecord) or update DataMapper fork for Ruby 3.x compatibility
+
+#### 7. Quick Match Creation - Runtime Caching Issue
+
+* **Issue:** Newly created quick matches don't appear in "Pending Matches" until server restart
+* **Cause:** Division entities load their `@matches` array once during initialization from `DivisionRepository#get()`. When a new match is added via API, the in-memory Division object is stale until next request creates a new Division instance
+* **Behavior:** Match IS saved to database correctly but doesn't appear in current page view
+* **Workaround:** Browser must refresh/reload the division view (AJAX calls `GET /ajax/division/:id` which creates fresh Division instance from DB)
+* **Expected Behavior:** After successful `POST /api/create_quick_match`, JavaScript reloads division view via `load_division_subsection(divisionId)` which triggers fresh data fetch
+* **Note:** This is not a bug per se—stateless HTTP means each request gets fresh data from DB. The "problem" only occurs if expecting live updates without page refresh
+
 ### Running the Application
 
 ```bash
@@ -288,4 +315,51 @@ ruby web_router.rb
 * **Security:** Avoid hardcoding secrets; rely on `config.yaml`. Validate user input. Be cautious with hook execution to prevent command injection
 * **Dependencies:** Add Ruby gems via `Gemfile` and run `bundle install`. Update `Gemfile.lock`. For database schema changes, edit `dm/data_model.rb` and provide migration via `dm/upgrade_model.rb`
 * **Commit Messages:** Sentence-style summaries (e.g., "Fix API key check to use array lookup")
+
+## 9. Quick Match Feature Implementation Notes
+
+**Implemented:** November 2025
+
+### Overview
+Extended the tournament system to support spontaneous "Quick Matches" that can be created ad-hoc via the web UI without pre-planning through CLI season setup, while maintaining full statistics compatibility.
+
+### Database Schema Changes
+Added four new columns to `matches` table:
+- `quick_match` (BOOLEAN, default: false) - Marks match as quick/spontaneous
+- `mode` (VARCHAR(50), default: 'standard') - Match mode (reserved for future: singles/doubles)
+- `win_condition` (VARCHAR(50), default: 'score_limit') - Victory condition (reserved for future variants)
+- `target_score` (INTEGER, default: 10) - Target score for match completion
+
+### Key Files Modified
+- `dm/data_model.rb`: DataMapper model extended with new properties
+- `match.rb`: Entity extended with attributes, getters/setters, smart defaults
+- `match_repository.rb`: Added `create_quick_match()` helper, updated mapping methods
+- `web_router.rb`: New `/api/create_quick_match` endpoint with validation
+- `views/division.erb`: Quick match creation form with 4-player selection
+- `public/js/foos.js`: AJAX submission logic with client-side validation
+
+### Important Implementation Details
+1. **Round field must be set to 0 (not NULL)** for quick matches to appear immediately in pending matches list. NULL values cause runtime display issues due to division caching.
+2. **Migration challenges:** Ruby 3.3 compatibility issues with old DataMapper/Bundler versions (Fixnum constant removed, `untaint` method removed). Solution: Direct SQLite `ALTER TABLE` commands instead of `dm/upgrade_model.rb`.
+3. **Current limitation:** Quick matches must be played as Best-of-3 (like regular league matches) because:
+   - Foos client expects 3 submatches structure
+   - `result_processor.rb` assumes exactly 3 score pairs
+   - `match.rb` `calculate_victories()` hardcoded for 3 submatches
+4. **Statistics integration:** Quick matches tracked with same stats as league matches; `quick_match` flag allows future filtering/separation in reports.
+
+### Migration SQL (for reference)
+```sql
+ALTER TABLE matches ADD COLUMN quick_match BOOLEAN DEFAULT 0;
+ALTER TABLE matches ADD COLUMN mode VARCHAR(50) DEFAULT 'standard';
+ALTER TABLE matches ADD COLUMN win_condition VARCHAR(50) DEFAULT 'score_limit';
+ALTER TABLE matches ADD COLUMN target_score INTEGER DEFAULT 10;
+```
+
+### Future Work (Steps 3-8)
+- **Step 3:** Expose quick match metadata in `/api/get_open_matches` for Foos client
+- **Step 4:** Enable result processor to handle variable submatch counts (single-game support)
+- **Step 5:** Enhanced player validation and duplicate prevention in UI
+- **Step 6:** Separate quick match statistics in division views and reports
+- **Step 7:** Hook manager integration for quick match events
+- **Step 8:** Persistent UI preferences for frequent player pairings
 

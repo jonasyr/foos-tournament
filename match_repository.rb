@@ -43,11 +43,49 @@ def delete(match_entity)
   match_record.destroy
 end
 
+def create_quick_match(division_id:, players:, mode: nil, win_condition: nil, target_score: nil, round: nil)
+  raise ArgumentError, 'division_id is required for quick matches' if division_id.nil?
+
+  player_ids = Array(players).dup
+  player_ids.fill(nil, player_ids.length...4)
+  player_ids = player_ids.first(4)
+
+  # Quick matches use round 0 by default (not bound to league rounds)
+  round = 0 if round.nil?
+
+  match_entity = Match.new(
+    nil,
+    player_ids,
+    division_id,
+    round,
+    quick_match: true,
+    mode: mode,
+    win_condition: win_condition,
+    target_score: target_score,
+    status: 0
+  )
+  match_entity.set_status(0)
+  add(match_entity)
+  return match_entity
+end
+
 private
 
 def map_record_to_entity(m)
   players = [m.pl1, m.pl2, m.pl3, m.pl4]
-  match_entity = Match.new(m.id,players, m.division_id, m.round)
+  match_entity = Match.new(
+    m.id,
+    players,
+    m.division_id,
+    m.round,
+    quick_match: m.quick_match,
+    mode: m.mode,
+    win_condition: m.win_condition,
+    target_score: m.target_score,
+    status: m.status,
+    time: m.time,
+    duration: m.duration
+  )
   if m.status == 2
     scores = [[m.score1a, m.score1b], [m.score2a, m.score2b], [m.score3a, m.score3b]]
     match_entity.set_scores(scores)
@@ -75,6 +113,10 @@ def map_entity_to_record(match_entity, match_record)
   match_record.pl2 = players[1]
   match_record.pl3 = players[2]
   match_record.pl4 = players[3]
+  match_record.quick_match = match_entity.quick_match?
+  match_record.mode = match_entity.mode || Match::DEFAULT_MODE
+  match_record.win_condition = match_entity.win_condition || Match::DEFAULT_WIN_CONDITION
+  match_record.target_score = match_entity.target_score || Match::DEFAULT_TARGET_SCORE
   if match_entity.played?
     scores = match_entity.scores
     match_record.score1a = scores[0][0]

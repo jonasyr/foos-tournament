@@ -32,6 +32,61 @@
 <div class="tab2-content tab2-content-matches">
 
 <div class="col-md-12">
+<% players_sorted = @players.values.sort_by { |player| player.name.to_s.downcase } %>
+<h4>Create quick match</h4>
+<form id="quick-match-form" class="form-inline" data-division-id="<%= @division_id %>">
+  <div class="row">
+    <div class="col-sm-6 col-md-3 form-group">
+      <label class="sr-only" for="quick-match-player1">Player 1</label>
+      <select class="form-control quick-match-player" id="quick-match-player1" name="player1" required>
+        <option value="">Select player 1</option>
+        <% players_sorted.each do |player| %>
+          <option value="<%= player.id %>"><%= player.name %></option>
+        <% end %>
+      </select>
+    </div>
+    <div class="col-sm-6 col-md-3 form-group">
+      <label class="sr-only" for="quick-match-player2">Player 2</label>
+      <select class="form-control quick-match-player" id="quick-match-player2" name="player2" required>
+        <option value="">Select player 2</option>
+        <% players_sorted.each do |player| %>
+          <option value="<%= player.id %>"><%= player.name %></option>
+        <% end %>
+      </select>
+    </div>
+    <div class="col-sm-6 col-md-3 form-group">
+      <label class="sr-only" for="quick-match-player3">Player 3</label>
+      <select class="form-control quick-match-player" id="quick-match-player3" name="player3" required>
+        <option value="">Select player 3</option>
+        <% players_sorted.each do |player| %>
+          <option value="<%= player.id %>"><%= player.name %></option>
+        <% end %>
+      </select>
+    </div>
+    <div class="col-sm-6 col-md-3 form-group">
+      <label class="sr-only" for="quick-match-player4">Player 4</label>
+      <select class="form-control quick-match-player" id="quick-match-player4" name="player4" required>
+        <option value="">Select player 4</option>
+        <% players_sorted.each do |player| %>
+          <option value="<%= player.id %>"><%= player.name %></option>
+        <% end %>
+      </select>
+    </div>
+  </div>
+  <div class="row" style="margin-top: 10px;">
+    <div class="col-sm-6 col-md-4 form-group">
+      <label class="sr-only" for="quick-match-api-key">API Key</label>
+      <input type="password" class="form-control" id="quick-match-api-key" name="api_key" placeholder="API key" required>
+    </div>
+    <div class="col-sm-6 col-md-2 form-group">
+      <button type="submit" class="btn btn-primary" id="quick-match-submit">Create match</button>
+    </div>
+  </div>
+</form>
+<div id="quick-match-feedback" class="alert" style="display:none;"></div>
+</div>
+
+<div class="col-md-12">
 <h4>Matches pending to play</h4>
 <table class="table">
 <% @open_matches.each do |m| %>

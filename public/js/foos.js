@@ -109,6 +109,9 @@ function on_load_division_subsection() {
         $("#player-content").text("");
     });
     activate_match_popovers();
+    if ($("#quick-match-form").length) {
+        setup_quick_match_form();
+    }
 }
 
 function activate_player_rivals() {
@@ -181,6 +184,84 @@ function load_player_modal(division_id, player_id) {
 
 function on_load_player_modal() {
     on_load_history_modal();
+}
+
+function setup_quick_match_form() {
+    var form = $("#quick-match-form");
+    var feedback = $("#quick-match-feedback");
+    var submitButton = $("#quick-match-submit");
+    var defaultButtonText = submitButton.text();
+
+    form.off('submit').on('submit', function(event) {
+        event.preventDefault();
+
+        feedback.hide();
+        feedback.removeClass('alert-success alert-danger alert-warning');
+
+        var divisionId = parseInt(form.data('division-id'), 10);
+        var apiKey = $("#quick-match-api-key").val().trim();
+        var playerIds = [];
+        var missingSelection = false;
+
+        form.find('.quick-match-player').each(function() {
+            var value = $(this).val();
+            if (!value) {
+                missingSelection = true;
+            } else {
+                playerIds.push(parseInt(value, 10));
+            }
+        });
+
+        if (missingSelection || playerIds.length !== 4) {
+            show_quick_match_feedback('warning', 'Please select four different players.');
+            return;
+        }
+
+        var uniquePlayers = Array.from(new Set(playerIds));
+        if (uniquePlayers.length !== 4) {
+            show_quick_match_feedback('warning', 'Each player can only be selected once.');
+            return;
+        }
+
+        if (!apiKey) {
+            show_quick_match_feedback('warning', 'API key is required.');
+            return;
+        }
+
+        submitButton.prop('disabled', true).text('Creating...');
+
+        $.ajax({
+            url: '/api/create_quick_match',
+            method: 'POST',
+            contentType: 'application/json',
+            dataType: 'json',
+            headers: { 'X-API-KEY': apiKey },
+            data: JSON.stringify({
+                division_id: divisionId,
+                player_ids: playerIds
+            })
+        }).done(function(response) {
+            show_quick_match_feedback('success', 'Quick match created (ID #' + response.match.id + ').');
+            form[0].reset();
+            setTimeout(function() { load_division_subsection(divisionId); }, 600);
+        }).fail(function(xhr) {
+            var message = 'Could not create quick match.';
+            if (xhr.responseJSON && xhr.responseJSON.error) {
+                message = xhr.responseJSON.error;
+            }
+            show_quick_match_feedback('danger', message);
+        }).always(function() {
+            submitButton.prop('disabled', false).text(defaultButtonText);
+        });
+    });
+}
+
+function show_quick_match_feedback(type, message) {
+    var feedback = $("#quick-match-feedback");
+    feedback.removeClass('alert-success alert-danger alert-warning');
+    feedback.addClass('alert-' + type);
+    feedback.text(message);
+    feedback.show();
 }
 
 /* Simulator modal */

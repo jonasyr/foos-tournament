@@ -404,6 +404,12 @@ before '/api/set_*' do
   halt 403 unless params['apiKey'] && API_KEYS.include?(params['apiKey'])
 end
 
+before '/api/create_quick_match' do
+  api_key = request.env['HTTP_X_API_KEY'] || params['apiKey'] || params['api_key']
+  halt 403, json_api({'error' => 'Forbidden'}) unless api_key && API_KEYS.include?(api_key)
+  content_type :json
+end
+
 # ===============================================
 # New authenticated Stats API routes
 # ===============================================
@@ -580,6 +586,51 @@ post '/api/set_result' do
     HookManager.match_played(data['id'])
     json_api({'result' => 'Match result correctly processed'})
   end
+end
+
+post '/api/create_quick_match' do
+  begin
+    payload = request.body.read
+    payload = '{}' if payload.nil? || payload.empty?
+    data = JSON.parse(payload)
+  rescue JSON::ParserError
+    halt 400, json_api({'error' => 'Invalid JSON payload'})
+  end
+
+  division_id = (data['division_id'] || params['division_id']).to_i
+  halt 400, json_api({'error' => 'division_id is required'}) if division_id <= 0
+
+  player_ids = data['player_ids']
+  unless player_ids
+    player_ids = [params['player1'], params['player2'], params['player3'], params['player4']].compact
+  end
+  player_ids = player_ids.map(&:to_i).reject { |pid| pid <= 0 }
+
+  if player_ids.length != 4
+    halt 400, json_api({'error' => 'Exactly four players must be selected'})
+  end
+
+  if player_ids.uniq.length != 4
+    halt 400, json_api({'error' => 'Each player must be unique'})
+  end
+
+  halt 404, json_api({'error' => 'Division not found'}) unless DataModel::Division.get(division_id)
+
+  player_repo = PlayerRepository.new
+  players_by_id = player_repo.get_all_players_by_id
+  missing_players = player_ids.reject { |pid| players_by_id.key?(pid) }
+  unless missing_players.empty?
+    halt 400, json_api({'error' => 'Unknown player ids', 'missing' => missing_players})
+  end
+
+  match_repo = MatchRepository.new
+  begin
+    match = match_repo.create_quick_match(division_id: division_id, players: player_ids)
+  rescue ArgumentError => e
+    halt 400, json_api({'error' => e.message})
+  end
+
+  json_api({'result' => 'Match created', 'match' => match2api(match)})
 end
 
 def match2api(m)

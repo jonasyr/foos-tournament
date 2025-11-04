@@ -88,6 +88,11 @@ class Match
   property :status,   Integer  # 0=pending 1=cancelled 2=played
   property :time,     DateTime
   property :duration, Integer
+
+  property :quick_match,  Boolean, default: false
+  property :mode,         String,  length: 50, default: 'standard'
+  property :win_condition, String, length: 50, default: 'score_limit'
+  property :target_score, Integer, default: 10
 end
 
 class GoalEvent
