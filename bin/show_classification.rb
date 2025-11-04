@@ -1,3 +1,4 @@
+# CLI command that prints the current division classification table.
 $LOAD_PATH << '..'
 
 require 'division_repository'

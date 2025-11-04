@@ -1,3 +1,5 @@
+# Sinatra web application exposing UI pages and JSON endpoints for the
+# foosball tournament manager.
 $LOAD_PATH << '.'
 
 require 'sinatra'
