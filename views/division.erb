@@ -48,6 +48,17 @@
         <option value="singles">Singles</option>
       </select>
     </div>
+    <div class="col-sm-6 col-md-3 form-group">
+      <label class="sr-only" for="quick-match-win-condition">Win condition</label>
+      <select class="form-control" id="quick-match-win-condition" name="win_condition">
+        <option value="score_limit" selected>Score limit</option>
+        <option value="best_of">Best of 3</option>
+      </select>
+    </div>
+    <div class="col-sm-6 col-md-2 form-group">
+      <label class="sr-only" for="quick-match-target-score">Target score</label>
+      <input type="number" class="form-control" id="quick-match-target-score" name="target_score" placeholder="Target (e.g. 10)" min="1" max="50" value="10">
+    </div>
   </div>
   <div class="row">
     <div class="col-sm-6 col-md-3 form-group quick-match-player-group" data-slot="0">

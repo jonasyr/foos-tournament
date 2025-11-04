@@ -732,9 +732,37 @@ post '/api/create_quick_match' do
     halt 400, json_api({'error' => 'Unknown player ids', 'missing' => missing_players})
   end
 
+  # Extract and validate win_condition and target_score
+  allowed_win_conditions = %w[score_limit best_of time_limit]
+  win_condition = data['win_condition'] || params['win_condition'] || 'score_limit'
+  win_condition = win_condition.to_s.downcase
+  win_condition = 'score_limit' unless allowed_win_conditions.include?(win_condition)
+
+  target_score_raw = data['target_score'] || params['target_score']
+  target_score = if target_score_raw
+    begin
+      Integer(target_score_raw)
+    rescue ArgumentError, TypeError
+      10
+    end
+  else
+    10
+  end
+
+  # Validate target_score range
+  if target_score < 1 || target_score > 50
+    halt 400, json_api({'error' => 'Target score must be between 1 and 50'})
+  end
+
   match_repo = MatchRepository.new
   begin
-    match = match_repo.create_quick_match(division_id: division_id, players: player_ids, mode: mode)
+    match = match_repo.create_quick_match(
+      division_id: division_id,
+      players: player_ids,
+      mode: mode,
+      win_condition: win_condition,
+      target_score: target_score
+    )
   rescue ArgumentError => e
     halt 400, json_api({'error' => e.message})
   end
@@ -807,6 +835,7 @@ def match2api(m)
     'mode' => m.mode || 'standard',
     'quick_match' => m.quick_match?
   }
+  response['win_condition'] = m.win_condition if m.win_condition
   response['target_score'] = m.target_score if m.target_score
   if m.played?
     response['played'] = true
