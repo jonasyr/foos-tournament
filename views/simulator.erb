@@ -1,6 +1,17 @@
 <div id="simulation-input" class="col-md-5">
 
-<span id="simulation-data" data-match-id="<%= @match_id %>"></span>
+<span id="simulation-data" data-match-id="<%= @match_id %>" data-disabled="<%= @simulator_disabled %>"></span>
+
+<% player_name = lambda do |player_id|
+     player = player_id && @players[player_id]
+     player ? player.name : 'TBD'
+   end %>
+
+<% if @simulator_disabled %>
+  <div class="alert alert-warning">
+    <%= @simulator_error || 'The simulator is disabled until four unique players are assigned to this match.' %>
+  </div>
+<% end %>
 
 <table class="table table-borderless table-condensed">
 <tr>
@@ -10,11 +21,11 @@
 </tr>
 <% (0..3).each do |p| %>
 <tr>
-<td class="text-right"><%= @players[@match_players[p]].name %></td>
+<td class="text-right"><%= player_name.call(@match_players[p]) %></td>
 <td class="text-center"><span id="player-victories-<%= p %>">0</span></td>
 <td class="text-left">
-<button type="button" class="btn btn-default btn-xs result-direct" data-player="<%= p %>" data-result-direct="3">3</button>
-<button type="button" class="btn btn-default btn-xs result-direct" data-player="<%= p %>" data-result-direct="0">0</button>
+<button type="button" class="btn btn-default btn-xs result-direct<%= ' disabled' if @simulator_disabled %>" data-player="<%= p %>" data-result-direct="3" <%= 'disabled="disabled"' if @simulator_disabled %>>3</button>
+<button type="button" class="btn btn-default btn-xs result-direct<%= ' disabled' if @simulator_disabled %>" data-player="<%= p %>" data-result-direct="0" <%= 'disabled="disabled"' if @simulator_disabled %>>0</button>
 </td>
 </tr>
 <% end %>
@@ -27,16 +38,16 @@
 <td class="text-right"><%= sm[:player1a] %> + <%= sm[:player1b] %></td>
 <td class="text-center">
 <div class="btn-group">
-  <button type="button" class="btn btn-default btn-xs dropdown-toggle" data-toggle="dropdown" id="dropdown-<%= sm[:idx] %>">
+  <button type="button" class="btn btn-default btn-xs dropdown-toggle" data-toggle="dropdown" id="dropdown-<%= sm[:idx] %>" <%= 'disabled="disabled"' if @simulator_disabled %>>
     <span id="result-selected-<%= sm[:idx] %>" data-result-a="0" data-result-b="0" data-valid="0">Result</span> <span class="caret"></span>
   </button>
   <ul class="dropdown-menu">
 <% @results1.each do |r| %>
-    <li><a href="#" class="result-selector" data-submatch="<%= sm[:idx] %>" data-result-a="<%= r[0] %>" data-result-b="<%= r[1] %>"><%= r[0] %>-<%= r[1] %></a></li>
+    <li class="<%= 'disabled' if @simulator_disabled %>"><a href="#" class="result-selector<%= ' disabled' if @simulator_disabled %>" data-submatch="<%= sm[:idx] %>" data-result-a="<%= r[0] %>" data-result-b="<%= r[1] %>" <%= 'aria-disabled="true"' if @simulator_disabled %>><%= r[0] %>-<%= r[1] %></a></li>
 <% end %>
     <li role="separator" class="divider"></li>
 <% @results2.each do |r| %>
-    <li><a href="#" class="result-selector" data-submatch="<%= sm[:idx] %>" data-result-a="<%= r[0] %>" data-result-b="<%= r[1] %>"><%= r[0] %>-<%= r[1] %></a></li>
+    <li class="<%= 'disabled' if @simulator_disabled %>"><a href="#" class="result-selector<%= ' disabled' if @simulator_disabled %>" data-submatch="<%= sm[:idx] %>" data-result-a="<%= r[0] %>" data-result-b="<%= r[1] %>" <%= 'aria-disabled="true"' if @simulator_disabled %>><%= r[0] %>-<%= r[1] %></a></li>
 <% end %>
   </ul>
 </div>

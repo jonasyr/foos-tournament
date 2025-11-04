@@ -108,7 +108,61 @@ function on_load_division_subsection() {
     $("#player-modal").on('hide.bs.modal', function (event) {
         $("#player-content").text("");
     });
+    init_match_scope_filter();
     activate_match_popovers();
+    if ($("#quick-match-form").length) {
+        setup_quick_match_form();
+    }
+}
+
+function init_match_scope_filter() {
+    $('.match-scope-toggle').off('click').on('click', function(event) {
+        event.preventDefault();
+        scope = $(this).data('scope');
+        $('.match-scope-toggle').removeClass('active').attr('aria-pressed', 'false');
+        $(this).addClass('active').attr('aria-pressed', 'true');
+        apply_match_scope_filter(scope);
+    });
+    initial_scope = $('.match-scope-toggle.active').data('scope');
+    if (!initial_scope) {
+        initial_scope = 'all';
+    }
+    apply_match_scope_filter(initial_scope);
+}
+
+function apply_match_scope_filter(scope) {
+    allowed = ['all', 'league', 'quick'];
+    if ($.inArray(scope, allowed) === -1) {
+        scope = 'all';
+    }
+    show_quick = (scope === 'all' || scope === 'quick');
+    show_league = (scope === 'all' || scope === 'league');
+
+    $('[data-match-section]').each(function() {
+        section = $(this);
+        rows = section.find('tr[data-quick-match]');
+        if (rows.length === 0) {
+            return;
+        }
+        rows.each(function() {
+            row = $(this);
+            quick_flag = row.data('quick-match');
+            is_quick = (quick_flag === true || quick_flag === 'true' || quick_flag === 1 || quick_flag === '1');
+            if ((is_quick && show_quick) || (!is_quick && show_league)) {
+                row.show();
+            } else {
+                row.hide();
+            }
+        });
+        total_rows = rows.length;
+        visible_rows = rows.filter(':visible').length;
+        empty_row = section.find('.match-filter-empty-dynamic');
+        if (total_rows > 0 && visible_rows === 0) {
+            empty_row.show();
+        } else {
+            empty_row.hide();
+        }
+    });
 }
 
 function activate_player_rivals() {
@@ -183,6 +237,132 @@ function on_load_player_modal() {
     on_load_history_modal();
 }
 
+function setup_quick_match_form() {
+    var form = $("#quick-match-form");
+    var feedback = $("#quick-match-feedback");
+    var submitButton = $("#quick-match-submit");
+    var defaultButtonText = submitButton.text();
+    var modeField = $("#quick-match-mode");
+    var playerGroups = form.find('.quick-match-player-group');
+    var playerSelects = form.find('.quick-match-player');
+
+    function updatePlayerFieldsForMode(mode) {
+        mode = (mode || '').toString().toLowerCase();
+        if (mode !== 'singles' && mode !== 'doubles') {
+            mode = 'doubles';
+        }
+
+        playerGroups.each(function() {
+            var group = $(this);
+            var slot = parseInt(group.data('slot'), 10);
+            var select = group.find('.quick-match-player');
+            var optional = (slot === 1 || slot === 3);
+            if (mode === 'singles' && optional) {
+                group.addClass('hidden');
+                select.prop('disabled', true).prop('required', false).val('');
+            } else {
+                group.removeClass('hidden');
+                select.prop('disabled', false).prop('required', true);
+            }
+        });
+    }
+
+    modeField.off('change').on('change', function() {
+        updatePlayerFieldsForMode($(this).val());
+    });
+
+    updatePlayerFieldsForMode(modeField.val());
+
+    form.off('submit').on('submit', function(event) {
+        event.preventDefault();
+
+        feedback.hide();
+        feedback.removeClass('alert-success alert-danger alert-warning');
+
+        var divisionId = parseInt(form.data('division-id'), 10);
+        var apiKey = $("#quick-match-api-key").val().trim();
+        var mode = (modeField.val() || '').toString().toLowerCase();
+        if ($.inArray(mode, ['singles', 'doubles']) === -1) {
+            mode = 'doubles';
+        }
+
+        var playerIds = [null, null, null, null];
+        var presentPlayers = [];
+
+        playerSelects.each(function() {
+            var select = $(this);
+            var slot = parseInt(select.data('slot'), 10);
+            if (isNaN(slot)) {
+                return;
+            }
+            var value = select.val();
+            if (value) {
+                var parsed = parseInt(value, 10);
+                playerIds[slot] = parsed;
+                presentPlayers.push(parsed);
+            }
+        });
+
+        var requiredSlots = mode === 'singles' ? [0, 2] : [0, 1, 2, 3];
+        var missingRequired = requiredSlots.some(function(slot) {
+            return playerIds[slot] === null || playerIds[slot] === undefined;
+        });
+        if (missingRequired) {
+            var message = mode === 'singles' ? 'Please select one player for each side.' : 'Please select four different players.';
+            show_quick_match_feedback('warning', message);
+            return;
+        }
+
+        var uniquePlayers = Array.from(new Set(presentPlayers));
+        if (uniquePlayers.length !== presentPlayers.length) {
+            show_quick_match_feedback('warning', 'Each player can only be selected once.');
+            return;
+        }
+
+        if (!apiKey) {
+            show_quick_match_feedback('warning', 'API key is required.');
+            return;
+        }
+
+        submitButton.prop('disabled', true).text('Creating...');
+
+        $.ajax({
+            url: '/api/create_quick_match',
+            method: 'POST',
+            contentType: 'application/json',
+            dataType: 'json',
+            headers: { 'X-API-KEY': apiKey },
+            data: JSON.stringify({
+                division_id: divisionId,
+                player_ids: playerIds,
+                mode: mode
+            })
+        }).done(function(response) {
+            show_quick_match_feedback('success', 'Quick match created (ID #' + response.match.id + ').');
+            form[0].reset();
+            modeField.val('doubles');
+            updatePlayerFieldsForMode(modeField.val());
+            setTimeout(function() { load_division_subsection(divisionId); }, 600);
+        }).fail(function(xhr) {
+            var message = 'Could not create quick match.';
+            if (xhr.responseJSON && xhr.responseJSON.error) {
+                message = xhr.responseJSON.error;
+            }
+            show_quick_match_feedback('danger', message);
+        }).always(function() {
+            submitButton.prop('disabled', false).text(defaultButtonText);
+        });
+    });
+}
+
+function show_quick_match_feedback(type, message) {
+    var feedback = $("#quick-match-feedback");
+    feedback.removeClass('alert-success alert-danger alert-warning');
+    feedback.addClass('alert-' + type);
+    feedback.text(message);
+    feedback.show();
+}
+
 /* Simulator modal */
 
 function load_simulator_modal(match_id) {
@@ -190,11 +370,14 @@ function load_simulator_modal(match_id) {
 }
 
 function on_load_simulator_modal() {
-	$(".result-selector").click(select_result);
-    $(".result-direct").click(select_result_direct);
+	$(".result-selector").not('[aria-disabled="true"]').click(select_result);
+    $(".result-direct").not(':disabled').click(select_result_direct);
 }
 
 function select_result() {
+    if ($(this).is('[aria-disabled="true"]') || $(this).closest('li').hasClass('disabled')) {
+        return false;
+    }
 	submatch = $(this).data('submatch');
     result_a = $(this).data('result-a');
     result_b = $(this).data('result-b');
@@ -205,6 +388,9 @@ function select_result() {
 }
 
 function select_result_direct() {
+    if ($(this).is(':disabled')) {
+        return false;
+    }
 	player = $(this).data("player");
 	result_direct = $(this).data("result-direct");
 	// FIXME: This if/else sequence could obviously be made
@@ -255,6 +441,9 @@ function update_selected_result(submatch, result_a, result_b) {
 }
 
 function run_simulation() {
+    if ($("#simulation-data").data('disabled')) {
+        return false;
+    }
     if ($("#result-selected-1").data("valid") != 1 &&
         $("#result-selected-2").data("valid") != 1 &&
         $("#result-selected-3").data("valid") != 1) {

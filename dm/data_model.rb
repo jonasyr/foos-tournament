@@ -1,6 +1,6 @@
 require 'data_mapper'
 require 'dm-migrations'
-require 'conf'
+require_relative '../conf'
 
 module DataModel
 
@@ -69,6 +69,7 @@ class Match
 
   property :id,       Serial
   belongs_to :division
+  has n, :goal_events, 'GoalEvent'
 
   property :round,    Integer
 
@@ -87,6 +88,25 @@ class Match
   property :status,   Integer  # 0=pending 1=cancelled 2=played
   property :time,     DateTime
   property :duration, Integer
+
+  property :quick_match,  Boolean, default: false
+  property :mode,         String,  length: 50, default: 'standard'
+  property :win_condition, String, length: 50, default: 'score_limit'
+  property :target_score, Integer, default: 10
+end
+
+class GoalEvent
+  include DataMapper::Resource
+
+  property :id,            Serial
+  property :match_id,      Integer, required: true, index: true
+  property :team,          String,  required: true  # 'yellow' | 'black'
+  property :at_second,     Integer, required: true
+  property :score_yellow,  Integer, required: true
+  property :score_black,   Integer, required: true
+  property :created_at,    DateTime, default: lambda { |_r, _p| DateTime.now }
+
+  belongs_to :match
 end
 
 #DataMapper::Logger.new($stdout, :debug)

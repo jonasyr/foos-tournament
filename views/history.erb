@@ -1,11 +1,25 @@
 <div class="classification-history-modal-content col-md-9">
 <span id="classification-history-last-step" data-last-step="<%= @classification_history.length %>"></span>
 
+<% player_name = lambda do |player_id|
+     player = player_id && @players[player_id]
+     player ? player.name : '—'
+   end %>
 <% for i in 0...(@classification_history.length) %>
-<div class="classification-history col-md-12" id="classification-history-<%= i+1 %>" data-match-id="<%= @classification_history[i][:match].id %>" data-step="<%= i+1 %>" style="display: none">
+<% quick = if @classification_history[i][:match].respond_to?(:quick_match?)
+            @classification_history[i][:match].quick_match?
+          elsif @classification_history[i][:match].respond_to?(:quick_match)
+            @classification_history[i][:match].quick_match
+          else
+            false
+          end %>
+<div class="classification-history col-md-12" id="classification-history-<%= i+1 %>" data-match-id="<%= @classification_history[i][:match].id %>" data-step="<%= i+1 %>" data-quick-match="<%= quick ? 'true' : 'false' %>" style="display: none">
 
 <div class="col-md-4">
 <p class="text-center"><%= i+1 %>/<%= @classification_history.length %></p>
+<% if quick %>
+<p class="text-center text-warning quick-match-indicator"><span class="glyphicon glyphicon-flash" aria-hidden="true"></span><span class="sr-only">Quick Match</span></p>
+<% end %>
 <ul class="pager">
   <li><a href="#" class="history-first"><span class="glyphicon glyphicon-fast-backward"></span></a></li>
   <li><a href="#" class="history-previous"><span class="glyphicon glyphicon-backward"></span></a></li>
@@ -23,7 +37,7 @@
 <% else %>
 <tr>
 <% end %>
-<td class="text-center"><%= @players[@classification_history[i][:match].players[p]].name %></td>
+<td class="text-center"><%= player_name.call(@classification_history[i][:match].players[p]) %></td>
 <td class="text-center"><%= @classification_history[i][:match].victories[p] %></td>
 </tr>
 <% end %>

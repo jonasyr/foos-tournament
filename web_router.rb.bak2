@@ -13,17 +13,6 @@ require 'player_repository'
 require 'result_processor'
 require 'hook_manager'
 
-ALLOWED_MATCH_MODES = {
-  'doubles' => 2
-}.freeze
-
-# Disable Rack protection for LAN development (allows API calls from localhost and LAN hostnames)
-# This must come AFTER all requires to ensure config_file doesn't override it
-set :protection, except: [:host_authorization, :json_csrf, :remote_token]
-set :bind, '0.0.0.0'
-set :allow_origin, :any
-set :allow_methods, [:get, :post, :put, :delete, :options]
-
 get '/' do
   season_repo = SeasonRepository.new()
   @seasons = season_repo.get_all_seasons()
@@ -164,34 +153,7 @@ get '/ajax/simulator/:match' do
   @players = player_repo.get_all_players_by_id()
 
   @match_players = match.players
-  match_player_names = @match_players.map do |player_id|
-    player = @players[player_id]
-    player ? player.name : nil
-  end
-
-  present_players = @match_players.compact
-  singles_mode = match.quick_match? && (match.mode.to_s.downcase == 'singles')
-  missing_players = if singles_mode
-    [match_player_names[0], match_player_names[2]].any?(&:nil?)
-  else
-    match_player_names.any?(&:nil?)
-  end
-  duplicated_players = present_players.uniq.length != present_players.length
-  simulator_unsupported = singles_mode
-  @simulator_disabled = missing_players || duplicated_players || simulator_unsupported
-  @simulator_error = if simulator_unsupported
-    'The simulator is currently only available for doubles matches.'
-  elsif missing_players
-    'Not enough players are assigned to this match yet. Assign both teams to enable the simulator.'
-  elsif duplicated_players
-    'Each player can only appear once in the lineup. Please adjust the teams before running the simulator.'
-  else
-    nil
-  end
-
-  safe_name = lambda do |idx|
-    match_player_names[idx] || 'TBD'
-  end
+  match_player_names = @match_players.map { |x| @players[x].name }
 
   @classification = division.get_current_classification()
   @classification.each do |c|
@@ -205,42 +167,29 @@ get '/ajax/simulator/:match' do
   @results1 = [[5, 0], [5, 1], [5, 2], [5, 3], [5, 4]]
   @results2 = [[4, 5], [3, 5], [2, 5], [1, 5], [0, 5]]
 
-  if singles_mode
-    placeholder = '—'
-    @submatches = [
-      {
-        :idx => 1,
-        :player1a => safe_name.call(0),
-        :player1b => placeholder,
-        :player2a => safe_name.call(2),
-        :player2b => placeholder,
-      }
-    ]
-  else
-    @submatches = [
-      {
-        :idx => 1,
-        :player1a => safe_name.call(0),
-        :player1b => safe_name.call(1),
-        :player2a => safe_name.call(2),
-        :player2b => safe_name.call(3),
-      },
-      {
-        :idx => 2,
-        :player1a => safe_name.call(0),
-        :player1b => safe_name.call(2),
-        :player2a => safe_name.call(1),
-        :player2b => safe_name.call(3),
-      },
-      {
-        :idx => 3,
-        :player1a => safe_name.call(0),
-        :player1b => safe_name.call(3),
-        :player2a => safe_name.call(1),
-        :player2b => safe_name.call(2),
-      }
-    ]
-  end
+  @submatches = [
+    {
+      :idx => 1,
+      :player1a => match_player_names[0],
+      :player1b => match_player_names[1],
+      :player2a => match_player_names[2],
+      :player2b => match_player_names[3],
+    },
+    {
+      :idx => 2,
+      :player1a => match_player_names[0],
+      :player1b => match_player_names[2],
+      :player2a => match_player_names[1],
+      :player2b => match_player_names[3],
+    },
+    {
+      :idx => 3,
+      :player1a => match_player_names[0],
+      :player1b => match_player_names[3],
+      :player2a => match_player_names[1],
+      :player2b => match_player_names[2],
+    }
+  ]
 
   erb :simulator
 end
@@ -275,7 +224,7 @@ post '/ajax/simulation/:match' do
   erb :simulation
 end
 
-get %r{/api/v1/players/?} do
+get %r{/api/v1/players/?$} do
   player_repo = PlayerRepository.new()
   response = {}
   player_repo.get_all_players().each do |p|
@@ -284,13 +233,13 @@ get %r{/api/v1/players/?} do
   json_api(response)
 end
 
-get %r{/api/v1/players/(?<player_id>\d+)/?} do
+get %r{/api/v1/players/(?<player_id>\d+)/?$} do
   player_repo = PlayerRepository.new()
   p = player_repo.get(params[:player_id])
   json_api(player2api(p))
 end
 
-get %r{/api/v1/seasons/?} do
+get %r{/api/v1/seasons/?$} do
   season_repo = SeasonRepository.new()
   response = []
   season_repo.get_all_seasons().each do |s|
@@ -299,25 +248,25 @@ get %r{/api/v1/seasons/?} do
   json_api(response)
 end
 
-get %r{/api/v1/seasons/current/?} do
+get %r{/api/v1/seasons/current/?$} do
   season_repo = SeasonRepository.new()
   s = season_repo.get_most_recent_season()
   json_api(season2api(s))
 end
 
-get %r{/api/v1/seasons/(?<season_id>\d+)/?} do
+get %r{/api/v1/seasons/(?<season_id>\d+)/?$} do
   season_repo = SeasonRepository.new()
   s = season_repo.get(params[:season_id].to_i)
   json_api(season2api(s))
 end
 
-get %r{/api/v1/divisions/(?<division_id>\d+)/?} do
+get %r{/api/v1/divisions/(?<division_id>\d+)/?$} do
   division_repo = DivisionRepository.new()
   d = division_repo.get(params[:division_id].to_i)
   json_api(division2api(d))
 end
 
-get %r{/api/v1/divisions/(?<division_id>\d+)/players/?} do
+get %r{/api/v1/divisions/(?<division_id>\d+)/players/?$} do
   division_repo = DivisionRepository.new()
   d = division_repo.get(params[:division_id].to_i)
   response = {}
@@ -327,7 +276,7 @@ get %r{/api/v1/divisions/(?<division_id>\d+)/players/?} do
   json_api(response)
 end
 
-get %r{/api/v1/divisions/(?<division_id>\d+)/players/(?<player_id>\d+)/?} do
+get %r{/api/v1/divisions/(?<division_id>\d+)/players/(?<player_id>\d+)/?$} do
   response = {}
   division_repo = DivisionRepository.new()
   d = division_repo.get(params[:division_id].to_i)
@@ -346,7 +295,7 @@ get %r{/api/v1/divisions/(?<division_id>\d+)/players/(?<player_id>\d+)/?} do
   json_api(response)
 end
 
-get %r{/api/v1/divisions/(?<division_id>\d+)/matches/?} do
+get %r{/api/v1/divisions/(?<division_id>\d+)/matches/?$} do
   division_repo = DivisionRepository.new()
   d = division_repo.get(params[:division_id].to_i)
   response = []
@@ -358,7 +307,7 @@ get %r{/api/v1/divisions/(?<division_id>\d+)/matches/?} do
   json_api(response)
 end
 
-get %r{/api/v1/divisions/(?<division_id>\d+)/matches/open/?} do
+get %r{/api/v1/divisions/(?<division_id>\d+)/matches/open/?$} do
   division_repo = DivisionRepository.new()
   d = division_repo.get(params[:division_id].to_i)
 
@@ -371,7 +320,7 @@ get %r{/api/v1/divisions/(?<division_id>\d+)/matches/open/?} do
   json_api(response)
 end
 
-get %r{/api/v1/divisions/(?<division_id>\d+)/matches/played/?} do
+get %r{/api/v1/divisions/(?<division_id>\d+)/matches/played/?$} do
   division_repo = DivisionRepository.new()
   d = division_repo.get(params[:division_id].to_i)
 
@@ -384,7 +333,7 @@ get %r{/api/v1/divisions/(?<division_id>\d+)/matches/played/?} do
   json_api(response)
 end
 
-get %r{/api/v1/divisions/(?<division_id>\d+)/classification/?} do
+get %r{/api/v1/divisions/(?<division_id>\d+)/classification/?$} do
   division_repo = DivisionRepository.new()
   d = division_repo.get(params[:division_id].to_i)
   response = d.get_current_classification()
@@ -392,7 +341,7 @@ get %r{/api/v1/divisions/(?<division_id>\d+)/classification/?} do
   json_api(response)
 end
 
-get %r{/api/v1/matches/(?<match_id>\d+)/?} do
+get %r{/api/v1/matches/(?<match_id>\d+)/?$} do
   match_repo = MatchRepository.new()
   match = match_repo.get(params[:match_id].to_i)
   if match.played?
@@ -421,7 +370,22 @@ get '/api/get_open_matches' do
     division_data[:matches] = []
     open_matches = d.get_open_matches()
     open_matches.each do |m|
-      division_data[:matches] << serialize_open_match(m, players)
+      name1 = players[m.players[0]].name
+      name2 = players[m.players[1]].name
+      name3 = players[m.players[2]].name
+      name4 = players[m.players[3]].name
+      match_data = {
+        :id => m.id,
+        :round => m.round,
+        :player_ids => m.players,
+        :players => [name1, name2, name3, name4],
+        :submatches => [
+          [[name1, name2], [name3, name4]],
+          [[name1, name3], [name2, name4]],
+          [[name1, name4], [name2, name3]],
+        ]
+      }
+      division_data[:matches] << match_data
     end
     response << division_data
   end
@@ -429,27 +393,10 @@ get '/api/get_open_matches' do
   json_api(response)
 end
 
-get '/api/get_quick_match/:id' do
-  match_repo = MatchRepository.new()
-  player_repo = PlayerRepository.new
-
-  content_type :json
-  match = match_repo.get(params[:id].to_i)
-  halt 404, json_api({ error: 'match not found' }) unless match
-  halt 404, json_api({ error: 'not a quick match' }) unless match.quick_match?
-
-  players = player_repo.get_all_players_by_id()
-  json_api(serialize_open_match(match, players))
-end
-
 before '/api/set_*' do
-  halt 403 unless params['apiKey'] && API_KEYS.include?(params['apiKey'])
-end
-
-before '/api/create_quick_match' do
-  api_key = request.env['HTTP_X_API_KEY'] || params['apiKey'] || params['api_key']
-  halt 403, json_api({'error' => 'Forbidden'}) unless api_key && API_KEYS.include?(api_key)
-  content_type :json
+  if params['apiKey'] != Conf.settings.api_key
+    halt 403
+  end
 end
 
 # ===============================================
@@ -483,8 +430,8 @@ get '/api/health' do
   
   {
     ok: true,
-    season_count: DataModel::Season.all.size,
-    player_count: DataModel::Player.all.size,
+    season_count: DataModel::Season.count,
+    player_count: DataModel::Player.count,
     auth: {
       key_present: api_key_present,
       key_valid: api_key_valid
@@ -498,45 +445,14 @@ post '/api/matches' do
   season = DataModel::Season.first(:status => 1) || DataModel::Season.first
   halt 400, {error: 'no season'}.to_json unless season
 
-  mode = (p['mode'] || 'doubles').to_s
-  team_size = ALLOWED_MATCH_MODES[mode]
-  halt 422, {error: 'unsupported mode'}.to_json unless team_size
-
-  player_payload = p['players']
-  halt 422, {error: 'players missing'}.to_json unless player_payload.is_a?(Hash)
-
-  yellow_raw = player_payload['yellow']
-  black_raw = player_payload['black']
-  yellow_raw = yellow_raw.is_a?(Array) ? yellow_raw.compact : []
-  black_raw = black_raw.is_a?(Array) ? black_raw.compact : []
-
-  if yellow_raw.length != team_size || black_raw.length != team_size
-    halt 422, {error: "each team must have #{team_size} players"}.to_json
-  end
-
-  if (yellow_raw + black_raw).any? { |value| value.respond_to?(:strip) && value.strip.empty? }
-    halt 422, {error: 'player names must not be blank'}.to_json
-  end
-
-  normalized = (yellow_raw + black_raw).map do |value|
-    if value.is_a?(Integer)
-      "id:#{value}"
-    else
-      "name:#{value.to_s.strip.downcase}"
-    end
-  end
-  if normalized.uniq.length != normalized.length
-    halt 422, {error: 'players must be unique'}.to_json
-  end
-
   # Find or create players by name
   def ensure_player(x)
     return DataModel::Player.get(x) if x.is_a?(Integer)
     DataModel::Player.first(:name => x) || DataModel::Player.create(:name => x)
   end
-
-  y = yellow_raw.map { |n| ensure_player(n) }
-  b = black_raw.map { |n| ensure_player(n) }
+  
+  y = (p.dig('players', 'yellow') || []).map { |n| ensure_player(n) }
+  b = (p.dig('players', 'black') || []).map { |n| ensure_player(n) }
 
   # Find the first division in the season
   division = season.divisions.first
@@ -607,9 +523,8 @@ get '/api/stats/leaderboard' do
   limit = (params['limit'] || 50).to_i
   season_name = params['season']
   season_id = season_name ? DataModel::Season.first(:title => season_name)&.id : nil
-  scope = Stats.normalize_scope(params['scope'] || :all)
-
-  Stats.leaderboard(season_id: season_id, limit: limit, scope: scope).to_json
+  
+  Stats.leaderboard(season_id: season_id, limit: limit).to_json
 end
 
 get '/api/stats/players' do
@@ -618,25 +533,22 @@ end
 
 get '/api/stats/players/:id' do
   pid = params[:id].to_i
-  scope = Stats.normalize_scope(params['scope'] || :all)
-  Stats.player_detail(player_id: pid, scope: scope).to_json
+  Stats.player_detail(player_id: pid).to_json
 end
 
 get '/api/stats/h2h' do
   a = params['a'].to_i
   b = params['b'].to_i
   halt 400, {error: 'missing parameters a and b'}.to_json if a == 0 || b == 0
-  scope = Stats.normalize_scope(params['scope'] || :all)
-
-  Stats.h2h(a_id: a, b_id: b, scope: scope).to_json
+  
+  Stats.h2h(a_id: a, b_id: b).to_json
 end
 
 get '/api/stats/partnerships/:id' do
   pid = params[:id].to_i
   limit = (params['limit'] || 10).to_i
-  scope = Stats.normalize_scope(params['scope'] || :all)
-
-  Stats.partnerships(player_id: pid, limit: limit, scope: scope).to_json
+  
+  Stats.partnerships(player_id: pid, limit: limit).to_json
 end
 
 get '/api/stats/match/:id/timeline' do
@@ -665,147 +577,13 @@ post '/api/set_result' do
   end
 end
 
-post '/api/create_quick_match' do
-  begin
-    payload = request.body.read
-    payload = '{}' if payload.nil? || payload.empty?
-    data = JSON.parse(payload)
-  rescue JSON::ParserError
-    halt 400, json_api({'error' => 'Invalid JSON payload'})
-  end
-
-  division_id = (data['division_id'] || params['division_id']).to_i
-  halt 400, json_api({'error' => 'division_id is required'}) if division_id <= 0
-
-  allowed_modes = %w[singles doubles]
-  mode = data['mode'] || params['mode'] || 'doubles'
-  mode = mode.to_s.downcase
-  mode = 'doubles' unless allowed_modes.include?(mode)
-
-  raw_player_ids = if data.key?('player_ids')
-    data['player_ids']
-  else
-    [params['player1'], params['player2'], params['player3'], params['player4']]
-  end
-
-  player_ids = Array(raw_player_ids).map do |value|
-    next nil if value.nil? || value == ''
-    begin
-      Integer(value)
-    rescue ArgumentError, TypeError
-      nil
-    end
-  end
-  player_ids.fill(nil, player_ids.length...4)
-  player_ids = player_ids.first(4)
-
-  present_player_ids = player_ids.compact
-
-  required_count = mode == 'singles' ? 2 : 4
-  if present_player_ids.length != required_count
-    message = if mode == 'singles'
-      'Singles quick matches require exactly two players.'
-    else
-      'Doubles quick matches require exactly four players.'
-    end
-    halt 400, json_api({'error' => message})
-  end
-
-  if present_player_ids.uniq.length != present_player_ids.length
-    halt 400, json_api({'error' => 'Each player must be unique'})
-  end
-
-  if mode == 'singles'
-    yellow_player = present_player_ids[0]
-    black_player = present_player_ids[1]
-    player_ids = [yellow_player, nil, black_player, nil]
-  end
-
-  halt 404, json_api({'error' => 'Division not found'}) unless DataModel::Division.get(division_id)
-
-  player_repo = PlayerRepository.new
-  players_by_id = player_repo.get_all_players_by_id
-  missing_players = present_player_ids.reject { |pid| players_by_id.key?(pid) }
-  unless missing_players.empty?
-    halt 400, json_api({'error' => 'Unknown player ids', 'missing' => missing_players})
-  end
-
-  match_repo = MatchRepository.new
-  begin
-    match = match_repo.create_quick_match(division_id: division_id, players: player_ids, mode: mode)
-  rescue ArgumentError => e
-    halt 400, json_api({'error' => e.message})
-  end
-
-  json_api({'result' => 'Match created', 'match' => match2api(match)})
-end
-
-def serialize_open_match(match, players_by_id)
-  player_ids = (match.players || []).dup
-  player_names = player_ids.map do |pid|
-    if pid && players_by_id[pid]
-      players_by_id[pid].name
-    else
-      nil
-    end
-  end
-
-  yellow_ids = player_ids[0..1] || []
-  black_ids = player_ids[2..3] || []
-  yellow_names = player_names[0..1] || []
-  black_names = player_names[2..3] || []
-
-  teams = {
-    :yellow => {
-      :ids => yellow_ids.compact,
-      :names => yellow_names.compact
-    },
-    :black => {
-      :ids => black_ids.compact,
-      :names => black_names.compact
-    }
-  }
-
-  data = {
-    :id => match.id,
-    :division_id => match.division_id,
-    :round => match.round,
-    :player_ids => player_ids,
-    :players => player_names,
-    :mode => match.mode || 'standard',
-    :quick_match => match.quick_match?,
-    :teams => teams
-  }
-
-  data[:target_score] = match.target_score if match.target_score
-
-  unless match.quick_match?
-    # League matches: Include all 3 submatch pairings for display
-    default_name = 'TBD'
-    name1 = player_names[0] || default_name
-    name2 = player_names[1] || default_name
-    name3 = player_names[2] || default_name
-    name4 = player_names[3] || default_name
-    data[:submatches] = [
-      [[name1, name2], [name3, name4]],
-      [[name1, name3], [name2, name4]],
-      [[name1, name4], [name2, name3]],
-    ]
-  end
-
-  data
-end
-
 def match2api(m)
   response = {
     'id' => m.id,
     'division_id' => m.division_id,
     'round' => m.round,
-    'players' => m.players,
-    'mode' => m.mode || 'standard',
-    'quick_match' => m.quick_match?
+    'players' => m.players
   }
-  response['target_score'] = m.target_score if m.target_score
   if m.played?
     response['played'] = true
     response['scores'] = m.scores

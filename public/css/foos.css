@@ -31,3 +31,16 @@
   color: #fff;
   background-color: #c44;
 }
+
+.match-type-label {
+  margin-left: 6px;
+  display: inline-block;
+}
+
+.match-scope-toolbar {
+  margin-bottom: 10px;
+}
+
+.quick-match-indicator {
+  margin-bottom: 10px;
+}

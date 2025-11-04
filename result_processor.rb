@@ -14,8 +14,14 @@ def self.parse_result(data, overwrite = false)
 
   match.set_scores(data['results'])
 
-  time = Time.at(data['start'])
-  duration = data['end'] - data['start']
+  start_time = data['start']
+  end_time = data['end']
+  time = start_time ? Time.at(start_time) : Time.now
+  duration = if start_time && end_time
+    end_time - start_time
+  else
+    nil
+  end
   match.set_status(2)
   match.set_played_stats(time, duration)
 

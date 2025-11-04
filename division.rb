@@ -173,6 +173,9 @@ def copy_current_classification(current_classification)
 end
 
 def analyse_match(match, one2one, classification)
+  # Skip quick matches from league statistics
+  return if match.respond_to?(:quick_match?) && match.quick_match?
+  
   submatches = match.get_submatches()
   submatches.each do |team1, score1, team2, score2|
     team1.each do |p|
