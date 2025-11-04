@@ -20,21 +20,23 @@ module Stats
   end
 
   def self.final_score(m)
-    # Calculate final score from the three sub-matches
-    # score1a (pl1+pl2) vs score1b (pl3+pl4)
-    # score2a (pl1+pl3) vs score2b (pl2+pl4)
-    # score3a (pl1+pl4) vs score3b (pl2+pl3)
+    # Calculate final score: Count wins from available submatches
+    # Works for both Best-of-3 (3 submatches) and Quick Match (1 submatch)
+    scores = []
+    scores << [m.score1a, m.score1b] if m.score1a && m.score1b
+    scores << [m.score2a, m.score2b] if m.score2a && m.score2b
+    scores << [m.score3a, m.score3b] if m.score3a && m.score3b
+    
     yellow_wins = 0
     black_wins = 0
     
-    yellow_wins += 1 if m.score1a && m.score1b && m.score1a > m.score1b
-    black_wins += 1  if m.score1a && m.score1b && m.score1b > m.score1a
-    
-    yellow_wins += 1 if m.score2a && m.score2b && m.score2a > m.score2b
-    black_wins += 1  if m.score2a && m.score2b && m.score2b > m.score2a
-    
-    yellow_wins += 1 if m.score3a && m.score3b && m.score3a > m.score3b
-    black_wins += 1  if m.score3a && m.score3b && m.score3b > m.score3a
+    scores.each do |y_score, b_score|
+      if y_score > b_score
+        yellow_wins += 1
+      elsif b_score > y_score
+        black_wins += 1
+      end
+    end
     
     [yellow_wins, black_wins]
   end
