@@ -209,16 +209,50 @@ end
   return if @scores.nil? || @scores.empty?
 
   if quick_match?
-    # Single game: Yellow team (pl1+pl2) vs Black team (pl3+pl4)
-    score = @scores.first
-    return unless valid_score_pair?(score)
-    if score[0] > score[1]
-      increment_victories([0, 1])  # Yellow team wins
-    elsif score[1] > score[0]
-      increment_victories([2, 3])  # Black team wins
+    # Quick matches: Same teams across all games
+    # Determine player indexes based on mode
+    if mode == 'singles'
+      # Singles: pl1 vs pl3 (pl2 and pl4 are nil)
+      yellow_players = [0].compact
+      black_players = [2].compact
+    else
+      # Doubles: pl1+pl2 vs pl3+pl4
+      yellow_players = [0, 1].compact
+      black_players = [2, 3].compact
+    end
+    
+    # For best-of-3 quick matches, count game wins
+    if win_condition == 'best_of'
+      yellow_wins = 0
+      black_wins = 0
+      
+      @scores.each do |score|
+        next unless valid_score_pair?(score)
+        if score[0] > score[1]
+          yellow_wins += 1
+        elsif score[1] > score[0]
+          black_wins += 1
+        end
+      end
+      
+      # Award victory to the team that won more games
+      if yellow_wins > black_wins
+        increment_victories(yellow_players)
+      elsif black_wins > yellow_wins
+        increment_victories(black_players)
+      end
+    else
+      # Single game: Yellow team vs Black team
+      score = @scores.first
+      return unless valid_score_pair?(score)
+      if score[0] > score[1]
+        increment_victories(yellow_players)
+      elsif score[1] > score[0]
+        increment_victories(black_players)
+      end
     end
   else
-    # Best-of-3: Three different pairings
+    # Traditional league matches: Best-of-3 with three different pairings
     matchups = [
       { score: @scores[0], winners: [0, 1], losers: [2, 3] },  # pl1+pl2 vs pl3+pl4
       { score: @scores[1], winners: [0, 2], losers: [1, 3] },  # pl1+pl3 vs pl2+pl4

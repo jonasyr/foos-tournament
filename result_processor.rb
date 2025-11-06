@@ -23,6 +23,15 @@ module ResultProcessor
       return false
     end
 
+    # Validate result count matches expected submatch count
+    results = data['results'] || []
+    expected_count = expected_result_count(match)
+    
+    if results.length != expected_count
+      puts "WARNING: Match #{match_id} expected #{expected_count} results, got #{results.length}"
+      # Continue anyway - don't block on validation
+    end
+
     match.set_scores(data['results'])
 
     start_time = data['start']
@@ -39,6 +48,20 @@ module ResultProcessor
     match_repo.update(match)
 
     return true
+  end
+
+  # Determines expected number of result pairs based on match configuration
+  #
+  # @param match [Match] the match entity
+  # @return [Integer] expected count (1 or 3)
+  private_class_method def self.expected_result_count(match)
+    if match.quick_match?
+      # Quick matches: 1 result for score_limit, 3 for best_of
+      match.win_condition == 'best_of' ? 3 : 1
+    else
+      # Traditional league matches: always 3 submatches
+      3
+    end
   end
 
 end

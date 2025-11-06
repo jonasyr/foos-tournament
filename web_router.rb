@@ -646,6 +646,81 @@ get '/api/stats/match/:id/timeline' do
   Stats.timeline_metrics(mid).to_json
 end
 
+# POST /api/stats/match/:id/goals - Record goal-by-goal timeline
+post '/api/stats/match/:id/goals' do
+  content_type :json
+  
+  match_id = params[:id].to_i
+  match = MatchRepository.new.get(match_id)
+  
+  unless match
+    halt 404, json_api({'error' => 'match not found'})
+  end
+  
+  begin
+    body = request.body.read
+    body = '{}' if body.nil? || body.empty?
+    request_body = JSON.parse(body)
+  rescue JSON::ParserError
+    halt 400, json_api({'error' => 'Invalid JSON payload'})
+  end
+  
+  events = request_body['events'] || []
+  
+  # Validate events format
+  events.each do |evt|
+    unless evt['team'] && evt['t'] && evt['score_yellow'] && evt['score_black']
+      halt 400, json_api({'error' => 'invalid event format - requires team, t, score_yellow, score_black'})
+    end
+  end
+  
+  # Store in database
+  stored_count = 0
+  events.each do |evt|
+    begin
+      DataModel::GoalEvent.create(
+        match_id: match_id,
+        team: evt['team'],
+        at_second: evt['t'].to_i,
+        score_yellow: evt['score_yellow'].to_i,
+        score_black: evt['score_black'].to_i
+      )
+      stored_count += 1
+    rescue => e
+      puts "Error storing goal event: #{e.message}"
+      # Continue with remaining events
+    end
+  end
+  
+  json_api({'success' => true, 'count' => stored_count})
+end
+
+# GET /api/stats/match/:id/goals - Retrieve goal timeline
+get '/api/stats/match/:id/goals' do
+  content_type :json
+  
+  match_id = params[:id].to_i
+  match = MatchRepository.new.get(match_id)
+  
+  unless match
+    halt 404, json_api({'error' => 'match not found'})
+  end
+  
+  goals = DataModel::GoalEvent.all(match_id: match_id, order: [:at_second.asc])
+  
+  result = goals.map { |g|
+    {
+      'team' => g.team,
+      't' => g.at_second,
+      'score_yellow' => g.score_yellow,
+      'score_black' => g.score_black,
+      'created_at' => g.created_at&.to_s
+    }
+  }
+  
+  json_api(result)
+end
+
 # ===============================================
 # End of Stats API routes
 # ===============================================
