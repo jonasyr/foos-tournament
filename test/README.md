@@ -117,3 +117,30 @@ After these tests pass:
 2. Test with real hardware (Raspberry Pi + foosball table)
 3. Verify league.json structure matches expected format
 4. Run integration tests with foos/ Python client
+
+## Simulating Match Results
+
+For testing without physical hardware, use the simulation script:
+
+```bash
+# View usage
+ruby test/simulate_match_result.rb
+
+# Simulate with auto-generated scores
+ruby test/simulate_match_result.rb 1005
+
+# Simulate with specific score (Yellow wins 5-3)
+ruby test/simulate_match_result.rb 1005 5 3
+
+# Simulate best-of-3 (auto-generates 3 games)
+ruby test/simulate_match_result.rb 1084
+```
+
+The script:
+- ✅ Loads match from database
+- ✅ Validates match configuration
+- ✅ Generates appropriate number of results (1 for score_limit, 3 for best_of)
+- ✅ Submits results via ResultProcessor
+- ✅ Shows final match status and winner
+
+This allows testing the full result processing pipeline without needing the physical foosball table.
