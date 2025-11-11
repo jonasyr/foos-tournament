@@ -1,25 +1,102 @@
+import { useEffect, useState } from "react";
 import { MatchCard } from "./MatchCard";
 import { FAB } from "./FAB";
 import { Card } from "./ui/card";
-import { Badge } from "./ui/badge";
-import { Trophy, Filter } from "lucide-react";
 import { Button } from "./ui/button";
+import { Trophy, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
 import { MatchSimulator } from "./MatchSimulator";
-import type { Match } from "../App";
-import { calculatePlayerStats } from "../lib/statsCalculator";
+import { statsApi, matchApi, playerApi } from "../lib/api";
+import type { LeaderboardEntry, OpenMatch, PlayersResponse } from "../lib/types";
 
 interface DashboardProps {
   onCreateMatch: () => void;
-  matches: Match[];
-  onUpdateMatch: (match: Match) => void;
 }
 
-export function Dashboard({ onCreateMatch, matches, onUpdateMatch }: DashboardProps) {
+// Frontend match representation for display
+interface DisplayMatch {
+  id: string;
+  timestamp: string;
+  yellowTeam: Array<{ id: string; name: string; elo: number }>;
+  blackTeam: Array<{ id: string; name: string; elo: number }>;
+  yellowScore: number;
+  blackScore: number;
+  duration: string;
+  isQuickMatch: boolean;
+  mode?: string;
+  target_score?: number;
+}
+
+export function Dashboard({ onCreateMatch }: DashboardProps) {
   const [filter, setFilter] = useState<"all" | "league" | "quick">("all");
   const [simulatorOpen, setSimulatorOpen] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<DisplayMatch | null>(null);
+  const [topPlayers, setTopPlayers] = useState<LeaderboardEntry[]>([]);
+  const [matches, setMatches] = useState<DisplayMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Load players, top players, and open matches in parallel
+        const [playersData, leaderboardData, matchesData] = await Promise.all([
+          playerApi.getAllPlayers(),
+          statsApi.leaderboard('all', 5),
+          matchApi.getOpenMatches(),
+        ]);
+
+        setTopPlayers(leaderboardData);
+
+        // Transform backend matches to frontend format
+        const allMatches: DisplayMatch[] = [];
+        matchesData.forEach(division => {
+          division.matches.forEach(match => {
+            allMatches.push(transformMatch(match, playersData));
+          });
+        });
+
+        setMatches(allMatches);
+      } catch (err: any) {
+        console.error('Failed to load dashboard data:', err);
+        setError(err.message || 'Failed to load dashboard');
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  // Transform backend OpenMatch to frontend DisplayMatch
+  function transformMatch(match: OpenMatch, playersData: PlayersResponse): DisplayMatch {
+    const yellowTeam = match.teams.yellow.ids.map((id, idx) => ({
+      id: String(id),
+      name: match.teams.yellow.names[idx] || 'Unknown',
+      elo: 1500, // Default ELO
+    }));
+
+    const blackTeam = match.teams.black.ids.map((id, idx) => ({
+      id: String(id),
+      name: match.teams.black.names[idx] || 'Unknown',
+      elo: 1500, // Default ELO
+    }));
+
+    return {
+      id: String(match.id),
+      timestamp: 'Pending',
+      yellowTeam,
+      blackTeam,
+      yellowScore: 0,
+      blackScore: 0,
+      duration: '0m',
+      isQuickMatch: match.quick_match,
+      mode: match.mode,
+      target_score: match.target_score,
+    };
+  }
 
   const filteredMatches = matches.filter((match) => {
     if (filter === "league") return !match.isQuickMatch;
@@ -27,8 +104,33 @@ export function Dashboard({ onCreateMatch, matches, onUpdateMatch }: DashboardPr
     return true;
   });
 
-  const playerStats = calculatePlayerStats(matches);
-  const topPlayers = playerStats.slice(0, 5);
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-8 max-w-md">
+          <div className="text-center space-y-4">
+            <Trophy className="w-12 h-12 text-destructive mx-auto" />
+            <h3 className="text-xl font-semibold">Failed to Load Dashboard</h3>
+            <p className="text-muted-foreground">{error}</p>
+            <p className="text-sm text-muted-foreground">
+              Make sure the backend server is running on port 4567
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-24 md:pb-8">
@@ -84,21 +186,35 @@ export function Dashboard({ onCreateMatch, matches, onUpdateMatch }: DashboardPr
             </div>
 
             {/* Match Cards Grid */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredMatches.map((match, index) => (
-                <motion.div
-                  key={match.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
-                >
-                  <MatchCard {...match} onClick={() => {
-                    setSelectedMatch(match);
-                    setSimulatorOpen(true);
-                  }} />
-                </motion.div>
-              ))}
-            </div>
+            {filteredMatches.length === 0 ? (
+              <Card className="p-12 text-center">
+                <Trophy className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No Matches Available</h3>
+                <p className="text-muted-foreground mb-6">
+                  Create a quick match to get started!
+                </p>
+                <Button onClick={onCreateMatch}>Create Match</Button>
+              </Card>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredMatches.map((match, index) => (
+                  <motion.div
+                    key={match.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                  >
+                    <MatchCard
+                      {...match}
+                      onClick={() => {
+                        setSelectedMatch(match);
+                        setSimulatorOpen(true);
+                      }}
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Sidebar - Mini Leaderboard */}
@@ -114,73 +230,50 @@ export function Dashboard({ onCreateMatch, matches, onUpdateMatch }: DashboardPr
                 <Trophy className="w-5 h-5 text-primary" />
               </div>
 
-              <div className="space-y-3">
-                {topPlayers.map((player, index) => (
-                  <div
-                    key={player.id}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary text-white text-sm">
-                      {index + 1}
+              {topPlayers.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No player data available yet
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {topPlayers.map((player, index) => (
+                    <div
+                      key={player.player_id}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary text-white text-sm">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate">{player.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {player.wins}W - {player.games - player.wins}L
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-primary">{player.elo}</p>
+                        <p className="text-xs text-muted-foreground">ELO</p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate">{player.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {player.wins}W - {player.losses}L
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-primary">{player.elo}</p>
-                      <p className="text-xs text-muted-foreground">ELO</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </Card>
           </motion.div>
-
-          {/* Mobile Leaderboard - Bottom Section */}
-          <div className="md:hidden">
-            <Card className="p-6 border border-border bg-card/50 backdrop-blur-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3>Top Players</h3>
-                <Trophy className="w-5 h-5 text-primary" />
-              </div>
-
-              <div className="space-y-3">
-                {topPlayers.map((player, index) => (
-                  <div
-                    key={player.id}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary text-white text-sm">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1">
-                      <p>{player.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {player.wins}W - {player.losses}L
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-primary">{player.elo}</p>
-                      <p className="text-xs text-muted-foreground">ELO</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
         </div>
       </div>
 
       <FAB onClick={onCreateMatch} />
       {selectedMatch && (
-        <MatchSimulator 
-          open={simulatorOpen} 
-          onClose={() => setSimulatorOpen(false)} 
+        <MatchSimulator
+          open={simulatorOpen}
+          onClose={() => setSimulatorOpen(false)}
           match={selectedMatch}
-          onUpdateMatch={onUpdateMatch}
+          onUpdateMatch={(updatedMatch) => {
+            setMatches(matches.map(m =>
+              m.id === updatedMatch.id ? updatedMatch : m
+            ));
+          }}
         />
       )}
     </div>
