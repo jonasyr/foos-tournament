@@ -33,6 +33,11 @@ BIND_PORT = (CONFIG['bind_port'] || 4567).to_i
 # Note: DataMapper.setup is done in dm/data_model.rb using Conf.settings.db_uri
 
 module Conf
-  module_function
-  def settings; Sinatra::Application.settings end
+  # Shortcut accessor to retrieve global Sinatra settings.
+  #
+  # @return [Sinatra::Base::Settings]
+  def settings
+    Sinatra::Application.settings
+  end
+  module_function :settings
 end

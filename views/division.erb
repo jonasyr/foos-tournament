@@ -1,12 +1,17 @@
 <div class="col-md-12">
 
+<% player_name ||= lambda do |player_id|
+     player = player_id && @players[player_id]
+     player&.name || '—'
+   end %>
+
 <div class="tab2-content tab2-content-classification">
 
 <div class="col-md-6">
 <table class="table table-condensed table-striped">
 <tr><th class="col-md-1 text-right">Pos</th><th class="col-md-4 text-left">Player</th><th class="col-md-2 text-right">Points</th><th class="col-md-2 text-right"># Rivals</th><th class="col-md-2 text-right"># Matches</th><th>Detail</th></tr>
 <% @classification.each do |c| %>
-<tr><td class="text-right"><%= c[:position] %></td><td class="text-left"><a href="#" class="player-details" data-toggle="modal" data-target="#player-modal" data-division-id="<%= @division_id %>" data-player-id="<%= c[:player_id] %>"><%= @players[c[:player_id]].name %></a></td><td class="text-right"><span title="<%= "#{'%.2f' % c[:points]}" %>"><%= "#{'%.0f' % c[:points]}" %></span></td><td class="text-right"><%= c[:num_rivals] %></td><td class="text-right"><%= c[:num_matches] %><% if @total_matches[c[:player_id]] %> / <%= @total_matches[c[:player_id]] %><% end %></td><td class="text-right"><a href="#" class="player-rivals" data-player-id="<%= c[:player_id] %>"><span class="glyphicon glyphicon-triangle-right"></span></a></tr>
+<tr><td class="text-right"><%= c[:position] %></td><td class="text-left"><a href="#" class="player-details" data-toggle="modal" data-target="#player-modal" data-division-id="<%= @division_id %>" data-player-id="<%= c[:player_id] %>"><%= player_name.call(c[:player_id]) %></a></td><td class="text-right"><span title="<%= "#{'%.2f' % c[:points]}" %>"><%= "#{'%.0f' % c[:points]}" %></span></td><td class="text-right"><%= c[:num_rivals] %></td><td class="text-right"><%= c[:num_matches] %><% if @total_matches[c[:player_id]] %> / <%= @total_matches[c[:player_id]] %><% end %></td><td class="text-right"><a href="#" class="player-rivals" data-player-id="<%= c[:player_id] %>"><span class="glyphicon glyphicon-triangle-right"></span></a></tr>
 <% end %>
 </table>
 </div>
@@ -14,13 +19,13 @@
 <% @rivals.each do |p,data| %>
 <div class="classification-detail col-md-6" id="classification-detail-<%= p %>" style="display: none">
 <table class="table table-condensed">
-<tr><th colspan="4">Classification details for <%= @players[p].name %></th></tr>
+<tr><th colspan="4">Classification details for <%= player_name.call(p) %></th></tr>
 <tr><th>Rival</th><th class="text-right">Points</th><th class="text-right">Victories</th><th class="text-right">Defeats</th></tr>
 <% data.each do |points, victories, defeats, r| %>
 <% if points == -1 %>
-<tr><td><%= @players[r].name %></td><td class="text-center" colspan="3">No matches yet</td></tr>
+<tr><td><%= player_name.call(r) %></td><td class="text-center" colspan="3">No matches yet</td></tr>
 <% else %>
-<tr><td><%= @players[r].name %></td><td class="text-right"><span title="<%= "#{'%.2f' % points}" %>"><%= "#{'%.0f' % points}" %></span></td><td class="text-right"><%= victories %></td><td class="text-right"><%= defeats %></td></tr>
+<tr><td><%= player_name.call(r) %></td><td class="text-right"><span title="<%= "#{'%.2f' % points}" %>"><%= "#{'%.0f' % points}" %></span></td><td class="text-right"><%= victories %></td><td class="text-right"><%= defeats %></td></tr>
 <% end %>
 <% end %>
 </table>
@@ -42,6 +47,17 @@
         <option value="doubles" selected>Doubles</option>
         <option value="singles">Singles</option>
       </select>
+    </div>
+    <div class="col-sm-6 col-md-3 form-group">
+      <label class="sr-only" for="quick-match-win-condition">Win condition</label>
+      <select class="form-control" id="quick-match-win-condition" name="win_condition">
+        <option value="score_limit" selected>Score limit</option>
+        <option value="best_of">Best of 3</option>
+      </select>
+    </div>
+    <div class="col-sm-6 col-md-2 form-group">
+      <label class="sr-only" for="quick-match-target-score">Target score</label>
+      <input type="number" class="form-control" id="quick-match-target-score" name="target_score" placeholder="Target (e.g. 10)" min="1" max="50" value="10">
     </div>
   </div>
   <div class="row">
@@ -96,10 +112,6 @@
 </div>
 
 <% require 'rack/utils' %>
-<% player_name = lambda do |player_id|
-     player = player_id && @players[player_id]
-     player ? player.name : '—'
-   end %>
 <% player_name_for_popover = lambda do |player_id|
      Rack::Utils.escape_html(player_name.call(player_id))
    end %>
@@ -137,31 +149,50 @@
     </div>
   </div>
 </div>
-<table class="table" data-match-section="open">
+<% team_labels = ['Yellow team', 'Black team'] %>
+<table class="table table-match-open" data-match-section="open">
+  <thead>
+    <tr>
+      <th class="col-md-5">Yellow team</th>
+      <th class="col-md-5">Black team</th>
+      <th class="text-center col-md-2">Actions</th>
+    </tr>
+  </thead>
   <tbody>
   <% if @open_matches.empty? %>
     <tr>
-      <td colspan="5" class="text-center text-muted">No matches pending.</td>
+      <td colspan="3" class="text-center text-muted">No matches pending.</td>
     </tr>
   <% else %>
     <% @open_matches.each do |m| %>
     <% quick = m.respond_to?(:quick_match?) ? m.quick_match? : (m.respond_to?(:quick_match) && m.quick_match) %>
+    <% teams = m.players.each_slice(2).to_a %>
     <tr data-quick-match="<%= quick ? 'true' : 'false' %>">
-      <td>
-        <% if quick %>
-          <span class="label label-warning match-type-label" title="Quick Match"><span class="glyphicon glyphicon-flash" aria-hidden="true"></span><span class="sr-only">Quick Match</span></span>
-        <% end %>
-        <%= player_name.call(m.players[0]) %>
+      <% teams.each_with_index do |team_players, team_index| %>
+        <% team_label = team_labels[team_index] || "Team #{team_index + 1}" %>
+        <td class="match-team-cell">
+          <div class="match-team-meta">
+            <small class="text-muted match-team-role"><%= team_label %></small>
+            <% if team_index.zero? && quick %>
+              <span class="label label-warning match-type-label" title="Quick Match"><span class="glyphicon glyphicon-flash" aria-hidden="true"></span><span class="sr-only">Quick Match</span></span>
+            <% end %>
+          </div>
+          <ul class="match-team-list">
+            <% display_players = team_players.empty? ? [nil] : team_players %>
+            <% display_players.each do |player_id| %>
+              <li><span class="match-player-name"><%= player_name.call(player_id) %></span></li>
+            <% end %>
+          </ul>
+        </td>
+      <% end %>
+      <td class="text-center">
+        <button class="btn btn-default btn-xs" type="button" data-toggle="modal" data-target="#simulator-modal" data-match-id="<%= m.id %>">Predict</button>
       </td>
-      <td><%= player_name.call(m.players[1]) %></td>
-      <td><%= player_name.call(m.players[2]) %></td>
-      <td><%= player_name.call(m.players[3]) %></td>
-      <td><button class="btn btn-default btn-xs" type="button" data-toggle="modal" data-target="#simulator-modal" data-match-id="<%= m.id %>">Predict</button></td>
     </tr>
     <% end %>
   <% end %>
     <tr class="match-filter-empty-dynamic" style="display: none">
-      <td colspan="5" class="text-center text-muted">No matches for the selected filter.</td>
+      <td colspan="3" class="text-center text-muted">No matches for the selected filter.</td>
     </tr>
   </tbody>
 </table>
@@ -169,18 +200,20 @@
 
 <div class="col-md-12">
 <h4>Matches already played</h4>
-<table class="table table-striped table-condensed" data-match-section="finished">
+<table class="table table-striped table-condensed table-match-finished" data-match-section="finished">
   <thead>
-    <tr><th>Time</th><th>Player 1</th><th></th><th>Player 2</th><th></th><th>Player 3</th><th></th><th>Player 4</th><th></th><th class="text-center">Details</th><th class="text-center"><span class="glyphicon glyphicon-sort"></span></th><th class="text-center">Duration</th></tr>
+    <tr><th>Time</th><th>Yellow team</th><th>Black team</th><th class="text-center">Details</th><th class="text-center"><span class="glyphicon glyphicon-sort"></span></th><th class="text-center">Duration</th></tr>
   </thead>
   <tbody>
   <% if @finished_matches.empty? %>
     <tr>
-      <td colspan="12" class="text-center text-muted">No matches have been played yet.</td>
+      <td colspan="6" class="text-center text-muted">No matches have been played yet.</td>
     </tr>
   <% else %>
     <% @finished_matches.each do |m| %>
     <% quick = m.respond_to?(:quick_match?) ? m.quick_match? : (m.respond_to?(:quick_match) && m.quick_match) %>
+    <% teams = m.players.each_slice(2).to_a %>
+    <% victories = Array(m.victories) %>
     <tr data-quick-match="<%= quick ? 'true' : 'false' %>">
       <td>
         <%= m.get_time() %>
@@ -188,18 +221,34 @@
           <span class="label label-warning match-type-label" title="Quick Match"><span class="glyphicon glyphicon-flash" aria-hidden="true"></span><span class="sr-only">Quick Match</span></span>
         <% end %>
       </td>
-      <td><%= player_name.call(m.players[0]) %></td><td><%= m.victories[0] %></td>
-      <td><%= player_name.call(m.players[1]) %></td><td><%= m.victories[1] %></td>
-      <td><%= player_name.call(m.players[2]) %></td><td><%= m.victories[2] %></td>
-      <td><%= player_name.call(m.players[3]) %></td><td><%= m.victories[3] %></td>
+      <% teams.each_with_index do |team_players, team_index| %>
+        <% team_label = team_labels[team_index] || "Team #{team_index + 1}" %>
+        <% team_offset = team_index * team_players.length %>
+        <td class="match-team-cell">
+          <div class="match-team-meta">
+            <small class="text-muted match-team-role"><%= team_label %></small>
+          </div>
+          <ul class="match-team-list">
+            <% display_players = team_players.empty? ? [nil] : team_players %>
+            <% display_players.each_with_index do |player_id, slot_index| %>
+              <% victory_value = victories[team_offset + slot_index]
+                 victory_display = (player_id.nil? || victory_value.nil?) ? '—' : victory_value %>
+              <li>
+                <span class="match-player-name"><%= player_name.call(player_id) %></span>
+                <span class="label label-default match-player-victory"><%= victory_display %></span>
+              </li>
+            <% end %>
+          </ul>
+        </td>
+      <% end %>
       <td class="text-center"><button class="btn btn-default btn-xs match-result-popover" data-toggle="popover" data-content="<table class='table table-condensed table-borderless'><%= match_popover_rows.call(m) %></table>">Details</button></td>
-      <td class="text-center"><button class="btn btn-default btn-xs" type="button" data-toggle="modal" data-target="#history-modal" data-division-id="<%= @division_id %>" data-match-id="<%= m.id %>"><span class="glyphicon glyphicon-sort"></span></button>
+      <td class="text-center"><button class="btn btn-default btn-xs" type="button" data-toggle="modal" data-target="#history-modal" data-division-id="<%= @division_id %>" data-match-id="<%= m.id %>"><span class="glyphicon glyphicon-sort"></span></button></td>
       <td class="text-center"><%= m.get_duration() %></td>
     </tr>
     <% end %>
   <% end %>
     <tr class="match-filter-empty-dynamic" style="display: none">
-      <td colspan="12" class="text-center text-muted">No matches for the selected filter.</td>
+      <td colspan="6" class="text-center text-muted">No matches for the selected filter.</td>
     </tr>
   </tbody>
 </table>

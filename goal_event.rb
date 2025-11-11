@@ -1,6 +1,10 @@
 require 'data_mapper'
 require './match'
 
+# DataMapper resource capturing a single goal within a quick or league match.
+#
+# Goal events fuel time-based analytics such as comeback detection. Records are
+# created by the simulator and processed by {Stats.timeline_metrics}.
 class GoalEvent
   include DataMapper::Resource
 

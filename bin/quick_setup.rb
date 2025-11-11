@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 # Quick setup script to add players and create a test match
 
+# CLI shortcut for seeding a minimal quick-match environment.
 $LOAD_PATH << '..'
 require 'season_repository'
 require 'player_repository'

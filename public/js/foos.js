@@ -324,6 +324,15 @@ function setup_quick_match_form() {
             return;
         }
 
+        var winCondition = $("#quick-match-win-condition").val() || 'score_limit';
+        var targetScoreRaw = $("#quick-match-target-score").val();
+        var targetScore = parseInt(targetScoreRaw, 10);
+        
+        if (isNaN(targetScore) || targetScore < 1 || targetScore > 50) {
+            show_quick_match_feedback('warning', 'Target score must be between 1 and 50.');
+            return;
+        }
+
         submitButton.prop('disabled', true).text('Creating...');
 
         $.ajax({
@@ -335,12 +344,16 @@ function setup_quick_match_form() {
             data: JSON.stringify({
                 division_id: divisionId,
                 player_ids: playerIds,
-                mode: mode
+                mode: mode,
+                win_condition: winCondition,
+                target_score: targetScore
             })
         }).done(function(response) {
             show_quick_match_feedback('success', 'Quick match created (ID #' + response.match.id + ').');
             form[0].reset();
             modeField.val('doubles');
+            $("#quick-match-win-condition").val('score_limit');
+            $("#quick-match-target-score").val('10');
             updatePlayerFieldsForMode(modeField.val());
             setTimeout(function() { load_division_subsection(divisionId); }, 600);
         }).fail(function(xhr) {

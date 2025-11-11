@@ -1,3 +1,40 @@
+# Represents a competitive division within a foosball season.
+#
+# Divisions hold player rosters, match collections, and statistical caches that
+# fuel standings and match assignment algorithms. The entity exposes helper
+# methods to query subsets of matches and to analyse historical results for the
+# classification tables displayed in the UI.
+#
+# @!attribute [rw] id
+#   Database identifier for the division.
+#   @return [Integer, nil]
+# @!attribute [r] level
+#   Hierarchical level (e.g., 1 for top tier).
+#   @return [Integer]
+# @!attribute [r] name
+#   Human-friendly division name.
+#   @return [String]
+# @!attribute [r] scoring
+#   Scoring strategy indicator controlling ranking calculations.
+#   @return [Integer]
+# @!attribute [r] total_rounds
+#   Number of rounds configured for the division.
+#   @return [Integer]
+# @!attribute [rw] current_round
+#   Round that has been most recently generated.
+#   @return [Integer]
+# @!attribute [r] players
+#   Player entities assigned to the division.
+#   @return [Array<Player>]
+# @!attribute [r] total_matches
+#   Historical number of matches per player.
+#   @return [Hash{Integer=>Integer}]
+# @!attribute [rw] assign_deviation
+#   Per-player deviation used by {MatchAssigner} to rebalance schedules.
+#   @return [Hash{Integer=>Integer}]
+# @!attribute [r] round_players
+#   Round configuration describing expected matches per player.
+#   @return [Hash{Integer=>Hash{Integer=>Integer}}]
 class Division
 
 attr_accessor :id
@@ -13,7 +50,22 @@ attr_reader :round_players
 
 @analysis_cache = nil
 
-def initialize(id, level, name, scoring, total_rounds, current_round, players, total_matches, assign_deviation, round_players, matches)
+  # Instantiates a division entity with its associated datasets.
+  #
+  # @param id [Integer, nil] division identifier
+  # @param level [Integer] competitive level indicator
+  # @param name [String] display name
+  # @param scoring [Integer] scoring mode used by standings
+  # @param total_rounds [Integer] configured number of rounds
+  # @param current_round [Integer] most recently generated round number
+  # @param players [Array<Player>] roster of players assigned to the division
+  # @param total_matches [Hash{Integer=>Integer}] total matches per player
+  # @param assign_deviation [Hash{Integer=>Integer}] deviation data used by
+  #   assignment heuristics
+  # @param round_players [Hash{Integer=>Hash{Integer=>Integer}}] per-round quota
+  #   information for each player
+  # @param matches [Array<Match>] collection of match entities in the division
+  def initialize(id, level, name, scoring, total_rounds, current_round, players, total_matches, assign_deviation, round_players, matches)
   @id = id
   @level = level
   @name = name
@@ -27,72 +79,114 @@ def initialize(id, level, name, scoring, total_rounds, current_round, players, t
   @matches = matches
 end
 
-def get_player_ids()
-  return @players.map { |x| x.id }
-end
+  # Returns the identifiers of all players assigned to the division.
+  #
+  # @return [Array<Integer>]
+  def get_player_ids()
+    return @players.map { |x| x.id }
+  end
 
-def get_all_matches()
-  return @matches
-end
+  # Provides the full list of matches regardless of their status.
+  #
+  # @return [Array<Match>]
+  def get_all_matches()
+    return @matches
+  end
 
-def get_assigned_matches()
-  return @matches.select { |x| not x.cancelled? }
-end
+  # Returns matches that are still scheduled (played or pending).
+  #
+  # @return [Array<Match>]
+  def get_assigned_matches()
+    return @matches.select { |x| not x.cancelled? }
+  end
 
-def get_open_matches()
-  return @matches.select { |x| not x.played? and not x.cancelled? }
-end
+  # Retrieves matches awaiting results.
+  #
+  # @return [Array<Match>]
+  def get_open_matches()
+    return @matches.select { |x| not x.played? and not x.cancelled? }
+  end
 
-def get_finished_matches()
-  return @matches.select { |x| x.played? }
-end
+  # Lists matches that have been completed.
+  #
+  # @return [Array<Match>]
+  def get_finished_matches()
+    return @matches.select { |x| x.played? }
+  end
 
-def get_round_matches(round)
-  return @matches.select { |x| x.round == round }
-end
+  # Selects matches belonging to a specific round.
+  #
+  # @param round [Integer]
+  # @return [Array<Match>]
+  def get_round_matches(round)
+    return @matches.select { |x| x.round == round }
+  end
 
-def get_rivals_info()
-  one2one = get_one2one()
-  all_rivals = {}
-  one2one.each do |p,data|
-    rivals_data = []
-    data.each do |r,info|
-      rivals_data << [info[:points], info[:victories], info[:defeats], r]
+  # Builds a summary of rivalry statistics for every player.
+  #
+  # The return value is keyed by player id and sorted by points, providing
+  # enough context for UI widgets showing recent rivalries.
+  #
+  # @return [Hash{Integer=>Array<Array>}]
+  def get_rivals_info()
+    one2one = get_one2one()
+    all_rivals = {}
+    one2one.each do |p,data|
+      rivals_data = []
+      data.each do |r,info|
+        rivals_data << [info[:points], info[:victories], info[:defeats], r]
+      end
+      all_rivals[p] = rivals_data.sort.reverse
     end
-    all_rivals[p] = rivals_data.sort.reverse
+    return all_rivals
   end
-  return all_rivals
-end
 
-def get_assigned_nmatches()
-  nmatches = {}
-  @players.each do |p|
-    nmatches[p.id] = 0
-  end
-  get_assigned_matches().each do |m|
-    m.players.each do |p|
-      nmatches[p] += 1
+  # Counts how many assigned matches each player currently has.
+  #
+  # @return [Hash{Integer=>Integer}]
+  def get_assigned_nmatches()
+    nmatches = {}
+    @players.each do |p|
+      nmatches[p.id] = 0
     end
+    get_assigned_matches().each do |m|
+      m.players.each do |p|
+        nmatches[p] += 1
+      end
+    end
+    return nmatches
   end
-  return nmatches
-end
 
-def get_current_classification()
-  return get_classification_history()[-1][:classification]
-end
+  # Returns the most recent classification snapshot.
+  #
+  # @return [Array<Hash>]
+  def get_current_classification()
+    return get_classification_history()[-1][:classification]
+  end
 
-def get_classification_with_extra_match(extra_match)
-  one2one, classification_history = analyse([extra_match])
-  return classification_history[-1][:classification]
-end
+  # Calculates the classification after hypothetically adding an extra match.
+  #
+  # @param extra_match [Match] non-persisted match entity to include in the
+  #   analysis
+  # @return [Array<Hash>] classification table after applying the match
+  def get_classification_with_extra_match(extra_match)
+    one2one, classification_history = analyse([extra_match])
+    return classification_history[-1][:classification]
+  end
 
-def get_one2one()
-  return get_analysis()[0]
-end
+  # Provides the cached one-to-one rivalry matrix.
+  #
+  # @return [Hash{Integer=>Hash{Integer=>Hash}}]
+  def get_one2one()
+    return get_analysis()[0]
+  end
 
-def get_classification_history()
-  return get_analysis()[1]
-end
+  # Returns the historical list of classification snapshots.
+  #
+  # @return [Array<Hash>]
+  def get_classification_history()
+    return get_analysis()[1]
+  end
 
 private
 

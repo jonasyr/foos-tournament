@@ -1,3 +1,4 @@
+# CLI utility that prints matches awaiting results for the given division.
 $LOAD_PATH << '..'
 
 require 'season_repository'

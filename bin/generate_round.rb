@@ -1,3 +1,6 @@
+# CLI helper that generates and prints proposed matches for the next round.
+#
+# Useful when operating the tournament from the terminal on the Raspberry Pi.
 $LOAD_PATH << '..'
 
 require 'division_repository'
