@@ -4,7 +4,7 @@ import { PlayerCard } from "./PlayerCard";
 import { MatchCard } from "./MatchCard";
 import { Card } from "./ui/card";
 import { mockDivisions } from "../lib/mockData";
-import { Trophy, Zap } from "lucide-react";
+import { Loader2, Zap } from "lucide-react";
 import { motion } from "motion/react";
 import {
   Select,
@@ -13,29 +13,125 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import type { Match } from "../App";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MatchSimulator } from "./MatchSimulator";
 import { calculatePlayerStats } from "../lib/statsCalculator";
+import { matchApi, playerApi } from "../lib/api";
+import type { OpenMatch, PlayersResponse } from "../lib/types";
 
-interface DivisionViewProps {
-  matches: Match[];
-  onUpdateMatch: (match: Match) => void;
+// DisplayMatch interface - matches Dashboard's structure
+interface DisplayMatch {
+  id: string;
+  timestamp: string;
+  yellowTeam: Array<{ id: string; name: string; elo: number }>;
+  blackTeam: Array<{ id: string; name: string; elo: number }>;
+  yellowScore: number;
+  blackScore: number;
+  duration: string;
+  isQuickMatch: boolean;
+  mode?: string;
+  target_score?: number;
 }
 
-export function DivisionView({ matches, onUpdateMatch }: DivisionViewProps) {
+export function DivisionView() {
   const division = mockDivisions[0];
   const [simulatorOpen, setSimulatorOpen] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<DisplayMatch | null>(null);
+  const [matches, setMatches] = useState<DisplayMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [playersData, matchesData] = await Promise.all([
+        playerApi.getAllPlayers(),
+        matchApi.getOpenMatches(),
+      ]);
+
+      // Transform backend matches to frontend format
+      const allMatches: DisplayMatch[] = [];
+      matchesData.forEach(division => {
+        division.matches.forEach(match => {
+          allMatches.push(transformMatch(match, playersData));
+        });
+      });
+
+      setMatches(allMatches);
+    } catch (err: any) {
+      console.error('Failed to load division data:', err);
+      setError(err.message || 'Failed to load division');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Transform backend OpenMatch to frontend DisplayMatch
+  function transformMatch(match: OpenMatch, playersData: PlayersResponse): DisplayMatch {
+    const yellowTeam = match.teams.yellow.ids.map((id, idx) => ({
+      id: String(id),
+      name: match.teams.yellow.names[idx] || 'Unknown',
+      elo: 1500,
+    }));
+
+    const blackTeam = match.teams.black.ids.map((id, idx) => ({
+      id: String(id),
+      name: match.teams.black.names[idx] || 'Unknown',
+      elo: 1500,
+    }));
+
+    return {
+      id: String(match.id),
+      timestamp: 'Pending',
+      yellowTeam,
+      blackTeam,
+      yellowScore: 0,
+      blackScore: 0,
+      duration: '0m',
+      isQuickMatch: match.quick_match,
+      mode: match.mode,
+      target_score: match.target_score,
+    };
+  }
 
   // Filter league matches only
   const leagueMatches = matches.filter(m => !m.isQuickMatch);
-  
+
   const pendingMatches = leagueMatches.filter(m => m.yellowScore === 0 && m.blackScore === 0);
   const playingMatches = leagueMatches.filter(m => (m.yellowScore > 0 || m.blackScore > 0) && m.yellowScore < 10 && m.blackScore < 10);
   const finishedMatches = leagueMatches.filter(m => m.yellowScore >= 10 || m.blackScore >= 10);
 
   const playerStats = calculatePlayerStats(matches);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Loading division data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-8 max-w-md">
+          <div className="text-center space-y-4">
+            <h3 className="text-xl font-semibold">Failed to Load Division</h3>
+            <p className="text-muted-foreground">{error}</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-24 md:pb-8">
@@ -267,11 +363,11 @@ export function DivisionView({ matches, onUpdateMatch }: DivisionViewProps) {
       </div>
       
       {selectedMatch && (
-        <MatchSimulator 
-          open={simulatorOpen} 
-          onClose={() => setSimulatorOpen(false)} 
+        <MatchSimulator
+          open={simulatorOpen}
+          onClose={() => setSimulatorOpen(false)}
           match={selectedMatch}
-          onUpdateMatch={onUpdateMatch}
+          onResultSubmitted={loadData}
         />
       )}
     </div>

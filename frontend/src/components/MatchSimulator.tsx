@@ -4,30 +4,51 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Minus, CheckCircle, ArrowUp, ArrowDown } from "lucide-react";
-import { mockPlayers } from "../lib/mockData";
+import { Plus, Minus, CheckCircle, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import { Separator } from "./ui/separator";
-import type { Match } from "../App";
+import { matchApi } from "../lib/api";
+import { toast } from "sonner";
+import type { MatchResultPayload } from "../lib/types";
+
+// DisplayMatch interface from Dashboard - for open matches
+interface DisplayMatch {
+  id: string;
+  timestamp: string;
+  yellowTeam: Array<{ id: string; name: string; elo: number }>;
+  blackTeam: Array<{ id: string; name: string; elo: number }>;
+  yellowScore: number;
+  blackScore: number;
+  duration: string;
+  isQuickMatch: boolean;
+  mode?: string;
+  target_score?: number;
+}
 
 interface MatchSimulatorProps {
   open: boolean;
   onClose: () => void;
-  match: Match;
-  onUpdateMatch: (match: Match) => void;
+  match: DisplayMatch;
+  onResultSubmitted?: () => void;
 }
 
-export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSimulatorProps) {
-  const [yellowScore, setYellowScore] = useState(match.yellowScore);
-  const [blackScore, setBlackScore] = useState(match.blackScore);
+export function MatchSimulator({ open, onClose, match, onResultSubmitted }: MatchSimulatorProps) {
+  const [yellowScore, setYellowScore] = useState(0);
+  const [blackScore, setBlackScore] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [startTime, setStartTime] = useState<number | null>(null);
 
-  // Reset scores when match changes
+  // Reset scores and start time when match changes or dialog opens
   useEffect(() => {
-    setYellowScore(match.yellowScore);
-    setBlackScore(match.blackScore);
-  }, [match.id]);
+    if (open) {
+      setYellowScore(0);
+      setBlackScore(0);
+      setStartTime(Math.floor(Date.now() / 1000));
+    }
+  }, [match.id, open]);
 
-  const yellowPlayers = match.yellowTeam;
-  const blackPlayers = match.blackTeam;
+  const yellowPlayers = match.yellowTeam?.map(p => p.name) || [];
+  const blackPlayers = match.blackTeam?.map(p => p.name) || [];
+  const targetScore = match.target_score || 10;
 
   const incrementYellow = () => setYellowScore((prev) => Math.min(prev + 1, 50));
   const decrementYellow = () => setYellowScore((prev) => Math.max(prev - 1, 0));
@@ -35,26 +56,61 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
   const decrementBlack = () => setBlackScore((prev) => Math.max(prev - 1, 0));
 
   const setYellowWin = () => {
-    setYellowScore(10);
+    setYellowScore(targetScore);
     setBlackScore(0);
   };
 
   const setBlackWin = () => {
-    setBlackScore(10);
+    setBlackScore(targetScore);
     setYellowScore(0);
   };
 
-  // Simulate standings based on score
+  const handleSubmitResult = async () => {
+    try {
+      setSubmitting(true);
+
+      const endTime = Math.floor(Date.now() / 1000);
+      const payload: MatchResultPayload = {
+        id: match.id,
+        results: [[yellowScore, blackScore]],
+        start: startTime || undefined,
+        end: endTime,
+      };
+
+      await matchApi.setResult(payload);
+
+      toast.success("Match result submitted!", {
+        description: `${yellowScore > blackScore ? 'Yellow' : 'Black'} team wins ${Math.max(yellowScore, blackScore)}-${Math.min(yellowScore, blackScore)}`,
+      });
+
+      onClose();
+
+      // Notify parent to refresh data
+      if (onResultSubmitted) {
+        onResultSubmitted();
+      }
+    } catch (err: any) {
+      console.error('Failed to submit result:', err);
+      toast.error('Failed to submit result', {
+        description: err.message || 'Please try again.',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Simulate standings based on score - simplified version
   const allPlayers = [...yellowPlayers, ...blackPlayers];
-  const simulatedStandings = allPlayers.map((player) => {
-    const isYellowTeam = yellowPlayers.some(p => p.id === player.id);
+  const simulatedStandings = allPlayers.map((playerName, idx) => {
+    const isYellowTeam = idx < yellowPlayers.length;
     const isWinning = isYellowTeam ? yellowScore > blackScore : blackScore > yellowScore;
     const eloChange = isWinning ? 15 : -10;
-    
+    const baseElo = 1000 + (10 - idx) * 20; // Mock base ELO
+
     return {
-      id: player.id,
-      name: player.name,
-      points: player.elo + eloChange,
+      id: idx,
+      name: playerName,
+      points: baseElo + eloChange,
       change: isWinning ? "up" : "down",
     };
   }).sort((a, b) => b.points - a.points);
@@ -84,7 +140,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                       Yellow Team
                     </h4>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {yellowPlayers.map((p) => p.name).join(", ")}
+                      {yellowPlayers.join(", ")}
                     </p>
                   </div>
                 </div>
@@ -96,6 +152,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                     onClick={decrementYellow}
                     className="h-12 w-12 rounded-full"
                     disabled={yellowScore === 0}
+                    data-testid="yellow-minus"
                   >
                     <Minus className="w-5 h-5" />
                   </Button>
@@ -114,6 +171,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                     size="icon"
                     onClick={incrementYellow}
                     className="h-12 w-12 rounded-full hover:bg-accent hover:text-white transition-colors"
+                    data-testid="yellow-plus"
                   >
                     <Plus className="w-5 h-5" />
                   </Button>
@@ -124,6 +182,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                   className="w-full mt-3"
                   onClick={setYellowWin}
                   size="sm"
+                  data-testid="yellow-win"
                 >
                   Quick Win (10-0)
                 </Button>
@@ -138,7 +197,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                       Black Team
                     </h4>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {blackPlayers.map((p) => p.name).join(", ")}
+                      {blackPlayers.join(", ")}
                     </p>
                   </div>
                 </div>
@@ -150,6 +209,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                     onClick={decrementBlack}
                     className="h-12 w-12 rounded-full"
                     disabled={blackScore === 0}
+                    data-testid="black-minus"
                   >
                     <Minus className="w-5 h-5" />
                   </Button>
@@ -168,6 +228,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                     size="icon"
                     onClick={incrementBlack}
                     className="h-12 w-12 rounded-full hover:bg-foreground hover:text-background transition-colors"
+                    data-testid="black-plus"
                   >
                     <Plus className="w-5 h-5" />
                   </Button>
@@ -178,6 +239,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                   className="w-full mt-3"
                   onClick={setBlackWin}
                   size="sm"
+                  data-testid="black-win"
                 >
                   Quick Win (10-0)
                 </Button>
@@ -187,24 +249,26 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
             <Separator />
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={onClose} className="flex-1">
+              <Button variant="outline" onClick={onClose} className="flex-1" disabled={submitting}>
                 Cancel
               </Button>
               <Button
                 className="flex-1 gap-2 bg-gradient-to-r from-secondary to-secondary/80"
-                onClick={() => {
-                  const updatedMatch = {
-                    ...match,
-                    yellowScore,
-                    blackScore,
-                    timestamp: yellowScore === 0 && blackScore === 0 ? match.timestamp : new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-                  };
-                  onUpdateMatch(updatedMatch);
-                  onClose();
-                }}
+                onClick={handleSubmitResult}
+                disabled={submitting || (yellowScore === 0 && blackScore === 0)}
+                data-testid="submit-result"
               >
-                <CheckCircle className="w-4 h-4" />
-                Confirm Result
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Confirm Result
+                  </>
+                )}
               </Button>
             </div>
           </div>

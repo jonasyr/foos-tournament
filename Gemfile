@@ -6,3 +6,6 @@ gem 'data_mapper'
 gem 'dm-sqlite-adapter'
 gem 'sqlite3'
 gem 'json', '~> 1.8.6'  # Required for dm-serializer compatibility
+gem 'oj'  # Fast JSON parser to bypass json_pure 1.8.6 incompatibility
+gem 'rackup'
+gem 'puma'

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -13,69 +13,113 @@ import {
   SelectValue,
 } from "./ui/select";
 import { motion, AnimatePresence } from "motion/react";
-import { ChevronLeft, ChevronRight, Check } from "lucide-react";
-import { mockPlayers } from "../lib/mockData";
+import { ChevronLeft, ChevronRight, Check, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "./ui/avatar";
-import { toast } from "sonner@2.0.3";
-import type { Match } from "../App";
+import { toast } from "sonner";
+import { playerApi, matchApi } from "../lib/api";
+import type { Player, QuickMatchPayload } from "../lib/types";
 
 interface QuickMatchCreatorProps {
   open: boolean;
   onClose: () => void;
-  onCreateMatch: (match: Match) => void;
+  onMatchCreated?: () => void;
 }
 
-export function QuickMatchCreator({ open, onClose, onCreateMatch }: QuickMatchCreatorProps) {
+export function QuickMatchCreator({ open, onClose, onMatchCreated }: QuickMatchCreatorProps) {
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState<"singles" | "doubles">("doubles");
-  const [yellowPlayer1, setYellowPlayer1] = useState("");
-  const [yellowPlayer2, setYellowPlayer2] = useState("");
-  const [blackPlayer1, setBlackPlayer1] = useState("");
-  const [blackPlayer2, setBlackPlayer2] = useState("");
+  const [yellowPlayer1, setYellowPlayer1] = useState<number | null>(null);
+  const [yellowPlayer2, setYellowPlayer2] = useState<number | null>(null);
+  const [blackPlayer1, setBlackPlayer1] = useState<number | null>(null);
+  const [blackPlayer2, setBlackPlayer2] = useState<number | null>(null);
   const [targetScore, setTargetScore] = useState([10]);
   const [bestOf, setBestOf] = useState(false);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load players when dialog opens
+  useEffect(() => {
+    if (open) {
+      loadPlayers();
+    }
+  }, [open]);
+
+  const loadPlayers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const playersData = await playerApi.getAllPlayers();
+      // Convert object to array: API returns {1: {name, nick}, 2: {name, nick}}
+      // but we need [{id: 1, name, nick}, {id: 2, name, nick}]
+      const playersArray = Object.entries(playersData).map(([id, player]) => ({
+        id: Number(id),
+        ...player,
+      }));
+      setPlayers(playersArray);
+    } catch (err: any) {
+      console.error('Failed to load players:', err);
+      setError(err.message || 'Failed to load players');
+      toast.error('Failed to load players', {
+        description: 'Please check your connection and try again.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleClose = () => {
     setStep(1);
     setMode("doubles");
-    setYellowPlayer1("");
-    setYellowPlayer2("");
-    setBlackPlayer1("");
-    setBlackPlayer2("");
+    setYellowPlayer1(null);
+    setYellowPlayer2(null);
+    setBlackPlayer1(null);
+    setBlackPlayer2(null);
     setTargetScore([10]);
     setBestOf(false);
+    setError(null);
     onClose();
   };
 
-  const handleCreateMatchClick = () => {
-    // Get selected players
-    const yellowTeam = mode === "singles" 
-      ? [mockPlayers.find(p => p.id === yellowPlayer1)!]
-      : [mockPlayers.find(p => p.id === yellowPlayer1)!, mockPlayers.find(p => p.id === yellowPlayer2)!];
-    
-    const blackTeam = mode === "singles"
-      ? [mockPlayers.find(p => p.id === blackPlayer1)!]
-      : [mockPlayers.find(p => p.id === blackPlayer1)!, mockPlayers.find(p => p.id === blackPlayer2)!];
+  const handleCreateMatchClick = async () => {
+    try {
+      setCreating(true);
 
-    // Create new match
-    const newMatch: Match = {
-      id: `m${Date.now()}`,
-      timestamp: "Just now",
-      yellowTeam,
-      blackTeam,
-      yellowScore: 0,
-      blackScore: 0,
-      duration: "0m 0s",
-      isQuickMatch: true,
-    };
+      // Build player IDs array based on mode
+      const playerIds: number[] = mode === "singles"
+        ? [yellowPlayer1!, blackPlayer1!]
+        : [yellowPlayer1!, yellowPlayer2!, blackPlayer1!, blackPlayer2!];
 
-    onCreateMatch(newMatch);
-    
-    toast.success("Match created successfully!", {
-      description: "Match is ready to start. Click to begin scoring.",
-    });
-    
-    handleClose();
+      // Create match payload
+      const payload: QuickMatchPayload = {
+        division_id: 1, // TODO: Get from current season/division context
+        player_ids: playerIds,
+        mode,
+        win_condition: bestOf ? 'best_of' : 'score_limit',
+        target_score: targetScore[0],
+      };
+
+      await matchApi.createQuickMatch(payload);
+
+      toast.success("Match created successfully!", {
+        description: "Match is ready to start. Check the dashboard.",
+      });
+
+      handleClose();
+
+      // Notify parent to refresh data
+      if (onMatchCreated) {
+        onMatchCreated();
+      }
+    } catch (err: any) {
+      console.error('Failed to create match:', err);
+      toast.error('Failed to create match', {
+        description: err.message || 'Please try again.',
+      });
+    } finally {
+      setCreating(false);
+    }
   };
 
   const getInitials = (name: string) => {
@@ -163,43 +207,31 @@ export function QuickMatchCreator({ open, onClose, onCreateMatch }: QuickMatchCr
               <div>
                 <h3 className="mb-4">Select Players</h3>
 
-                {/* Yellow Team */}
-                <Card className="p-4 mb-4 bg-accent/10 border-accent/20">
-                  <Label className="mb-3 flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-accent"></div>
-                    Yellow Team
-                  </Label>
-                  <div className="space-y-3">
-                    <Select value={yellowPlayer1} onValueChange={setYellowPlayer1}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Player 1" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {mockPlayers.map((player) => (
-                          <SelectItem key={player.id} value={player.id}>
-                            <div className="flex items-center gap-2">
-                              <Avatar className="w-6 h-6">
-                                <AvatarFallback className="text-xs bg-gradient-to-br from-primary to-secondary text-white">
-                                  {getInitials(player.name)}
-                                </AvatarFallback>
-                              </Avatar>
-                              {player.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    {mode === "doubles" && (
-                      <Select value={yellowPlayer2} onValueChange={setYellowPlayer2}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select Player 2" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {mockPlayers
-                            .filter((p) => p.id !== yellowPlayer1)
-                            .map((player) => (
-                              <SelectItem key={player.id} value={player.id}>
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                ) : error ? (
+                  <div className="text-center py-12">
+                    <p className="text-destructive mb-4">{error}</p>
+                    <Button onClick={loadPlayers} variant="outline">Retry</Button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Yellow Team */}
+                    <Card className="p-4 mb-4 bg-accent/10 border-accent/20">
+                      <Label className="mb-3 flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-accent"></div>
+                        Yellow Team
+                      </Label>
+                      <div className="space-y-3">
+                        <Select value={yellowPlayer1?.toString()} onValueChange={(val) => setYellowPlayer1(Number(val))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Player 1" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {players.map((player) => (
+                              <SelectItem key={player.id} value={player.id.toString()}>
                                 <div className="flex items-center gap-2">
                                   <Avatar className="w-6 h-6">
                                     <AvatarFallback className="text-xs bg-gradient-to-br from-primary to-secondary text-white">
@@ -210,73 +242,98 @@ export function QuickMatchCreator({ open, onClose, onCreateMatch }: QuickMatchCr
                                 </div>
                               </SelectItem>
                             ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </Card>
+                          </SelectContent>
+                        </Select>
 
-                {/* Black Team */}
-                <Card className="p-4 bg-muted/30 border-border">
-                  <Label className="mb-3 flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-foreground"></div>
-                    Black Team
-                  </Label>
-                  <div className="space-y-3">
-                    <Select value={blackPlayer1} onValueChange={setBlackPlayer1}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Player 1" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {mockPlayers
-                          .filter(
-                            (p) => p.id !== yellowPlayer1 && p.id !== yellowPlayer2
-                          )
-                          .map((player) => (
-                            <SelectItem key={player.id} value={player.id}>
-                              <div className="flex items-center gap-2">
-                                <Avatar className="w-6 h-6">
-                                  <AvatarFallback className="text-xs bg-gradient-to-br from-primary to-secondary text-white">
-                                    {getInitials(player.name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                {player.name}
-                              </div>
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
+                        {mode === "doubles" && (
+                          <Select value={yellowPlayer2?.toString()} onValueChange={(val) => setYellowPlayer2(Number(val))}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select Player 2" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {players
+                                .filter((p) => p.id !== yellowPlayer1)
+                                .map((player) => (
+                                  <SelectItem key={player.id} value={player.id.toString()}>
+                                    <div className="flex items-center gap-2">
+                                      <Avatar className="w-6 h-6">
+                                        <AvatarFallback className="text-xs bg-gradient-to-br from-primary to-secondary text-white">
+                                          {getInitials(player.name)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      {player.name}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    </Card>
 
-                    {mode === "doubles" && (
-                      <Select value={blackPlayer2} onValueChange={setBlackPlayer2}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select Player 2" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {mockPlayers
-                            .filter(
-                              (p) =>
-                                p.id !== yellowPlayer1 &&
-                                p.id !== yellowPlayer2 &&
-                                p.id !== blackPlayer1
-                            )
-                            .map((player) => (
-                              <SelectItem key={player.id} value={player.id}>
-                                <div className="flex items-center gap-2">
-                                  <Avatar className="w-6 h-6">
-                                    <AvatarFallback className="text-xs bg-gradient-to-br from-primary to-secondary text-white">
-                                      {getInitials(player.name)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  {player.name}
-                                </div>
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </Card>
+                    {/* Black Team */}
+                    <Card className="p-4 bg-muted/30 border-border">
+                      <Label className="mb-3 flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-foreground"></div>
+                        Black Team
+                      </Label>
+                      <div className="space-y-3">
+                        <Select value={blackPlayer1?.toString()} onValueChange={(val) => setBlackPlayer1(Number(val))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Player 1" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {players
+                              .filter(
+                                (p) => p.id !== yellowPlayer1 && p.id !== yellowPlayer2
+                              )
+                              .map((player) => (
+                                <SelectItem key={player.id} value={player.id.toString()}>
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="w-6 h-6">
+                                      <AvatarFallback className="text-xs bg-gradient-to-br from-primary to-secondary text-white">
+                                        {getInitials(player.name)}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    {player.name}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+
+                        {mode === "doubles" && (
+                          <Select value={blackPlayer2?.toString()} onValueChange={(val) => setBlackPlayer2(Number(val))}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select Player 2" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {players
+                                .filter(
+                                  (p) =>
+                                    p.id !== yellowPlayer1 &&
+                                    p.id !== yellowPlayer2 &&
+                                    p.id !== blackPlayer1
+                                )
+                                .map((player) => (
+                                  <SelectItem key={player.id} value={player.id.toString()}>
+                                    <div className="flex items-center gap-2">
+                                      <Avatar className="w-6 h-6">
+                                        <AvatarFallback className="text-xs bg-gradient-to-br from-primary to-secondary text-white">
+                                          {getInitials(player.name)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      {player.name}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    </Card>
+                  </>
+                )}
               </div>
 
               <div className="flex justify-between">
@@ -360,16 +417,26 @@ export function QuickMatchCreator({ open, onClose, onCreateMatch }: QuickMatchCr
               </div>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(2)} className="gap-2">
+                <Button variant="outline" onClick={() => setStep(2)} className="gap-2" disabled={creating}>
                   <ChevronLeft className="w-4 h-4" />
                   Back
                 </Button>
                 <Button
                   onClick={handleCreateMatchClick}
                   className="gap-2 bg-gradient-to-r from-primary to-secondary"
+                  disabled={creating || (mode === "singles" ? (!yellowPlayer1 || !blackPlayer1) : (!yellowPlayer1 || !yellowPlayer2 || !blackPlayer1 || !blackPlayer2))}
                 >
-                  <Check className="w-4 h-4" />
-                  Create Match
+                  {creating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Create Match
+                    </>
+                  )}
                 </Button>
               </div>
             </motion.div>

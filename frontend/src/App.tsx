@@ -1,30 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Navigation } from "./components/Navigation";
-import { Dashboard } from "./components/Dashboard";
+import { Dashboard, DashboardHandle } from "./components/Dashboard";
 import { QuickMatchCreator } from "./components/QuickMatchCreator";
 import { DivisionView } from "./components/DivisionView";
 import { PlayerProfile } from "./components/PlayerProfile";
 import { StatsHub } from "./components/StatsHub";
 import { ComponentLibrary } from "./components/ComponentLibrary";
 import { Toaster } from "./components/ui/sonner";
-import { mockMatches, mockPlayers } from "./lib/mockData";
-
-export interface Match {
-  id: string;
-  timestamp: string;
-  yellowTeam: typeof mockPlayers;
-  blackTeam: typeof mockPlayers;
-  yellowScore: number;
-  blackScore: number;
-  duration: string;
-  isQuickMatch: boolean;
-}
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [darkMode, setDarkMode] = useState(false);
   const [quickMatchOpen, setQuickMatchOpen] = useState(false);
-  const [matches, setMatches] = useState<Match[]>(mockMatches);
+  const dashboardRef = useRef<DashboardHandle>(null);
 
   useEffect(() => {
     // Check system preference on mount
@@ -45,31 +33,20 @@ export default function App() {
     setDarkMode(!darkMode);
   };
 
-  const handleCreateMatch = (newMatch: Match) => {
-    setMatches([newMatch, ...matches]);
-    setQuickMatchOpen(false);
-  };
-
-  const handleUpdateMatch = (updatedMatch: Match) => {
-    setMatches(matches.map(match => 
-      match.id === updatedMatch.id ? updatedMatch : match
-    ));
-  };
-
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
-        return <Dashboard onCreateMatch={() => setQuickMatchOpen(true)} matches={matches} onUpdateMatch={handleUpdateMatch} />;
+        return <Dashboard ref={dashboardRef} onCreateMatch={() => setQuickMatchOpen(true)} />;
       case "divisions":
-        return <DivisionView matches={matches} onUpdateMatch={handleUpdateMatch} />;
+        return <DivisionView />;
       case "stats":
-        return <StatsHub matches={matches} />;
+        return <StatsHub />;
       case "profile":
-        return <PlayerProfile matches={matches} />;
+        return <PlayerProfile />;
       case "components":
         return <ComponentLibrary />;
       default:
-        return <Dashboard onCreateMatch={() => setQuickMatchOpen(true)} matches={matches} onUpdateMatch={handleUpdateMatch} />;
+        return <Dashboard ref={dashboardRef} onCreateMatch={() => setQuickMatchOpen(true)} />;
     }
   };
 
@@ -87,7 +64,7 @@ export default function App() {
       <QuickMatchCreator
         open={quickMatchOpen}
         onClose={() => setQuickMatchOpen(false)}
-        onCreateMatch={handleCreateMatch}
+        onMatchCreated={() => dashboardRef.current?.refresh()}
       />
 
       <Toaster position="top-right" />

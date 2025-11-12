@@ -3,10 +3,18 @@
 $LOAD_PATH << '.'
 
 require 'sinatra'
-require 'conf'
 
+require 'conf'
 require 'tilt/erb'
 require 'json'
+require 'oj' # Use Oj for JSON parsing to avoid json_pure 1.8.6 compatibility issues
+
+# Helper to parse JSON with Oj (bypasses json_pure 1.8.6 incompatibility)
+def safe_json_parse(string)
+  Oj.load(string)
+rescue Oj::ParseError => e
+  raise StandardError, e.message
+end
 
 require 'season_repository'
 require 'division_repository'
@@ -727,7 +735,8 @@ end
 
 post '/api/set_result' do
   body = request.body.read
-  data = JSON.parse(body)
+  # Use safe_json_parse helper for compatibility with json_pure 1.8.6
+  data = safe_json_parse(body)
 
   fd = open("results/result_" + Time.now.to_i.to_s + '_' + data['id'].to_s + ".json", "w")
   fd.write(body)
@@ -746,9 +755,10 @@ post '/api/create_quick_match' do
   begin
     payload = request.body.read
     payload = '{}' if payload.nil? || payload.empty?
-    data = JSON.parse(payload)
-  rescue JSON::ParserError
-    halt 400, json_api({'error' => 'Invalid JSON payload'})
+    # Use safe_json_parse helper for compatibility with json_pure 1.8.6
+    data = safe_json_parse(payload)
+  rescue StandardError => e
+    halt 400, json_api({'error' => "Invalid JSON payload: #{e.message}"})
   end
 
   division_id = (data['division_id'] || params['division_id']).to_i
