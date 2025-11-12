@@ -2,13 +2,14 @@
 # Database seeding script to populate test data for UI testing
 # Creates a season with players, divisions, and sample matches (both open and completed)
 
-$LOAD_PATH << '..'
+# Add parent directory to load path
+$LOAD_PATH.unshift(File.expand_path('..', __dir__))
 
 require 'season_repository'
 require 'division_repository'
 require 'player_repository'
 require 'match_repository'
-require_relative '../dm/data_model'
+require 'dm/data_model'
 
 puts "Starting database seeding..."
 
@@ -34,15 +35,20 @@ else
 end
 
 # Get or create division
-season = season_repo.get(season_id)
-if season.divisions.length > 0
-  division = season.divisions.first
+season_data = DataModel::Season.get(season_id)
+if season_data.divisions.length > 0
+  division = season_data.divisions.first
   puts "Using existing division: #{division.name} (ID: #{division.id})"
 else
   puts "Creating division..."
-  division = Division.new(nil, season_id, "Premier League", 1, 0)
-  division.set_rounds(10, 1)
-  division_repo.add(division)
+  division = DataModel::Division.create(
+    season_id: season_id,
+    name: "Premier League",
+    level: 1,
+    scoring: 0,
+    total_rounds: 10,
+    current_round: 1
+  )
   puts "Created division: #{division.name} (ID: #{division.id})"
 end
 
@@ -87,9 +93,12 @@ end
 
 # Add all players to division if not already added
 puts "Adding players to division..."
-division_entity = division_repo.get(division.id)
 players.each do |player|
-  unless division_entity.players.any? { |p| p.id == player.id }
+  existing = DataModel::Divisionplayer.first(
+    division_id: division.id,
+    player_id: player.id
+  )
+  unless existing
     DataModel::Divisionplayer.create(
       division_id: division.id,
       player_id: player.id,
