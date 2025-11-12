@@ -143,7 +143,7 @@ describe('Dashboard Component', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('All Matches')).toBeInTheDocument();
+        expect(screen.getByText('All')).toBeInTheDocument();
       });
 
       expect(screen.getByText('League')).toBeInTheDocument();
@@ -156,7 +156,7 @@ describe('Dashboard Component', () => {
       render(<Dashboard onCreateMatch={mockOnCreateMatch} />);
 
       await waitFor(() => {
-        expect(screen.getByText('All Matches')).toBeInTheDocument();
+        expect(screen.getByText('All')).toBeInTheDocument();
       });
 
       // Act - Click Quick filter
