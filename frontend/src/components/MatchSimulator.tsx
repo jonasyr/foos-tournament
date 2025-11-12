@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Plus, Minus, CheckCircle, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import { Separator } from "./ui/separator";
 import { matchApi } from "../lib/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import type { OpenMatch, MatchResultPayload } from "../lib/types";
 
 interface MatchSimulatorProps {

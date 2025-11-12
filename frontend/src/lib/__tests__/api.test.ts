@@ -1,11 +1,37 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import axios from 'axios';
-import { statsApi, playerApi, matchApi, seasonApi } from '../api';
 import type { LeaderboardEntry, Player, QuickMatchPayload } from '../types';
 
-// Mock axios
-vi.mock('axios');
+// Variables for mock functions - var hoists before the mock callback
+var mockGet: any;
+var mockPost: any;
+
+// Mock axios with default implementation
+vi.mock('axios', () => {
+  return {
+    default: {
+      create: vi.fn(() => {
+        // Initialize mocks on first call if not already initialized
+        mockGet ??= vi.fn();
+        mockPost ??= vi.fn();
+
+        return {
+          get: mockGet,
+          post: mockPost,
+          interceptors: {
+            request: { use: vi.fn() },
+            response: { use: vi.fn() },
+          },
+        };
+      }),
+    },
+  };
+});
+
 const mockedAxios = axios as any;
+
+// Import after mocking
+import { statsApi, playerApi, matchApi, seasonApi } from '../api';
 
 describe('API Client Tests', () => {
   beforeEach(() => {
@@ -34,14 +60,7 @@ describe('API Client Tests', () => {
             elo: 1720,
           },
         ];
-        mockedAxios.create.mockReturnValue({
-          get: vi.fn().mockResolvedValue({ data: mockData }),
-          post: vi.fn(),
-          interceptors: {
-            request: { use: vi.fn() },
-            response: { use: vi.fn() },
-          },
-        });
+        mockGet.mockResolvedValue({ data: mockData });
 
         // Act
         const result = await statsApi.leaderboard();
@@ -58,15 +77,7 @@ describe('API Client Tests', () => {
         const mockData: LeaderboardEntry[] = [
           { player_id: 1, name: 'Alice', games: 5, wins: 5, win_rate: 1.0, elo: 2000 },
         ];
-        const mockGet = vi.fn().mockResolvedValue({ data: mockData });
-        mockedAxios.create.mockReturnValue({
-          get: mockGet,
-          post: vi.fn(),
-          interceptors: {
-            request: { use: vi.fn() },
-            response: { use: vi.fn() },
-          },
-        });
+        mockGet.mockResolvedValue({ data: mockData });
 
         // Act
         const result = await statsApi.leaderboard('quick', 10);
@@ -91,14 +102,7 @@ describe('API Client Tests', () => {
           { id: 1, name: 'Alice Johnson', nick: 'Alice', elo: 1850 },
           { id: 2, name: 'Bob Smith', nick: 'Bob', elo: 1720 },
         ];
-        mockedAxios.create.mockReturnValue({
-          get: vi.fn().mockResolvedValue({ data: mockPlayers }),
-          post: vi.fn(),
-          interceptors: {
-            request: { use: vi.fn() },
-            response: { use: vi.fn() },
-          },
-        });
+        mockGet.mockResolvedValue({ data: mockPlayers });
 
         // Act
         const result = await playerApi.getAllPlayers();
@@ -111,14 +115,7 @@ describe('API Client Tests', () => {
 
       it('should return empty array when no players exist', async () => {
         // Arrange
-        mockedAxios.create.mockReturnValue({
-          get: vi.fn().mockResolvedValue({ data: [] }),
-          post: vi.fn(),
-          interceptors: {
-            request: { use: vi.fn() },
-            response: { use: vi.fn() },
-          },
-        });
+        mockGet.mockResolvedValue({ data: [] });
 
         // Act
         const result = await playerApi.getAllPlayers();
@@ -142,15 +139,7 @@ describe('API Client Tests', () => {
           target_score: 10,
         };
         const mockResponse = { success: true, match_id: 42 };
-        const mockPost = vi.fn().mockResolvedValue({ data: mockResponse });
-        mockedAxios.create.mockReturnValue({
-          get: vi.fn(),
-          post: mockPost,
-          interceptors: {
-            request: { use: vi.fn() },
-            response: { use: vi.fn() },
-          },
-        });
+        mockPost.mockResolvedValue({ data: mockResponse });
 
         // Act
         const result = await matchApi.createQuickMatch(payload);
@@ -159,8 +148,7 @@ describe('API Client Tests', () => {
         expect(result).toEqual(mockResponse);
         expect(mockPost).toHaveBeenCalledWith(
           '/api/create_quick_match',
-          payload,
-          expect.any(Object)
+          payload
         );
       });
     });
@@ -175,15 +163,7 @@ describe('API Client Tests', () => {
           end: 1699891500,
         };
         const mockResponse = { result: 'Match result correctly processed' };
-        const mockPost = vi.fn().mockResolvedValue({ data: mockResponse });
-        mockedAxios.create.mockReturnValue({
-          get: vi.fn(),
-          post: mockPost,
-          interceptors: {
-            request: { use: vi.fn() },
-            response: { use: vi.fn() },
-          },
-        });
+        mockPost.mockResolvedValue({ data: mockResponse });
 
         // Act
         const result = await matchApi.setResult(payload);
@@ -207,14 +187,7 @@ describe('API Client Tests', () => {
     it('should handle network errors gracefully', async () => {
       // Arrange
       const networkError = new Error('Network Error');
-      mockedAxios.create.mockReturnValue({
-        get: vi.fn().mockRejectedValue(networkError),
-        post: vi.fn(),
-        interceptors: {
-          request: { use: vi.fn() },
-          response: { use: vi.fn() },
-        },
-      });
+      mockGet.mockRejectedValue(networkError);
 
       // Act & Assert
       await expect(statsApi.leaderboard()).rejects.toThrow('Network Error');
@@ -228,14 +201,7 @@ describe('API Client Tests', () => {
           data: { error: 'Resource not found' },
         },
       };
-      mockedAxios.create.mockReturnValue({
-        get: vi.fn().mockRejectedValue(apiError),
-        post: vi.fn(),
-        interceptors: {
-          request: { use: vi.fn() },
-          response: { use: vi.fn() },
-        },
-      });
+      mockGet.mockRejectedValue(apiError);
 
       // Act & Assert
       await expect(playerApi.getAllPlayers()).rejects.toEqual(apiError);
