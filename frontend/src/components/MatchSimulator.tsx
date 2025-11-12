@@ -138,6 +138,7 @@ export function MatchSimulator({ open, onClose, match, onResultSubmitted }: Matc
                     onClick={decrementYellow}
                     className="h-12 w-12 rounded-full"
                     disabled={yellowScore === 0}
+                    data-testid="yellow-minus"
                   >
                     <Minus className="w-5 h-5" />
                   </Button>
@@ -156,6 +157,7 @@ export function MatchSimulator({ open, onClose, match, onResultSubmitted }: Matc
                     size="icon"
                     onClick={incrementYellow}
                     className="h-12 w-12 rounded-full hover:bg-accent hover:text-white transition-colors"
+                    data-testid="yellow-plus"
                   >
                     <Plus className="w-5 h-5" />
                   </Button>
@@ -166,6 +168,7 @@ export function MatchSimulator({ open, onClose, match, onResultSubmitted }: Matc
                   className="w-full mt-3"
                   onClick={setYellowWin}
                   size="sm"
+                  data-testid="yellow-win"
                 >
                   Quick Win (10-0)
                 </Button>
@@ -192,6 +195,7 @@ export function MatchSimulator({ open, onClose, match, onResultSubmitted }: Matc
                     onClick={decrementBlack}
                     className="h-12 w-12 rounded-full"
                     disabled={blackScore === 0}
+                    data-testid="black-minus"
                   >
                     <Minus className="w-5 h-5" />
                   </Button>
@@ -210,6 +214,7 @@ export function MatchSimulator({ open, onClose, match, onResultSubmitted }: Matc
                     size="icon"
                     onClick={incrementBlack}
                     className="h-12 w-12 rounded-full hover:bg-foreground hover:text-background transition-colors"
+                    data-testid="black-plus"
                   >
                     <Plus className="w-5 h-5" />
                   </Button>
@@ -220,6 +225,7 @@ export function MatchSimulator({ open, onClose, match, onResultSubmitted }: Matc
                   className="w-full mt-3"
                   onClick={setBlackWin}
                   size="sm"
+                  data-testid="black-win"
                 >
                   Quick Win (10-0)
                 </Button>
@@ -236,6 +242,7 @@ export function MatchSimulator({ open, onClose, match, onResultSubmitted }: Matc
                 className="flex-1 gap-2 bg-gradient-to-r from-secondary to-secondary/80"
                 onClick={handleSubmitResult}
                 disabled={submitting || (yellowScore === 0 && blackScore === 0)}
+                data-testid="submit-result"
               >
                 {submitting ? (
                   <>

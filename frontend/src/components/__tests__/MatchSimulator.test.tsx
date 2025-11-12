@@ -60,7 +60,7 @@ describe('MatchSimulator Component', () => {
       );
 
       // Assert
-      expect(screen.getByText('Match Simulator')).toBeInTheDocument();
+      expect(screen.getByText('Match Scorer')).toBeInTheDocument();
       expect(screen.getByText('Yellow Team')).toBeInTheDocument();
       expect(screen.getByText('Black Team')).toBeInTheDocument();
     });
@@ -77,7 +77,7 @@ describe('MatchSimulator Component', () => {
       );
 
       // Assert
-      expect(screen.queryByText('Match Simulator')).not.toBeInTheDocument();
+      expect(screen.queryByText('Match Scorer')).not.toBeInTheDocument();
     });
 
     it('should display correct team names', () => {
@@ -127,15 +127,12 @@ describe('MatchSimulator Component', () => {
       );
 
       // Act
-      const plusButtons = screen.getAllByRole('button', { name: '' });
-      const yellowPlusButton = plusButtons.find(
-        (btn) => btn.querySelector('svg')?.classList.contains('lucide-plus')
-      );
-      if (yellowPlusButton) await user.click(yellowPlusButton);
+      const yellowPlusButton = screen.getByTestId('yellow-plus');
+      await user.click(yellowPlusButton);
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('1')).toBeInTheDocument();
+        expect(screen.getAllByText('1').length).toBeGreaterThan(0);
       });
     });
 
@@ -152,14 +149,9 @@ describe('MatchSimulator Component', () => {
       );
 
       // Act - Try to decrement from 0
-      const minusButtons = screen.getAllByRole('button', { name: '' });
-      const yellowMinusButton = minusButtons.find(
-        (btn) => btn.querySelector('svg')?.classList.contains('lucide-minus')
-      );
-      if (yellowMinusButton) {
-        await user.click(yellowMinusButton);
-        await user.click(yellowMinusButton);
-      }
+      const yellowMinusButton = screen.getByTestId('yellow-minus');
+      await user.click(yellowMinusButton);
+      await user.click(yellowMinusButton);
 
       // Assert - Score should still be 0
       const scores = screen.getAllByText('0');
@@ -201,13 +193,13 @@ describe('MatchSimulator Component', () => {
       );
 
       // Act
-      const yellowWinButton = screen.getByRole('button', { name: /yellow wins/i });
+      const yellowWinButton = screen.getByTestId('yellow-win');
       await user.click(yellowWinButton);
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('10')).toBeInTheDocument(); // Target score
-        expect(screen.getByText('7')).toBeInTheDocument(); // 70% of target
+        expect(screen.getAllByText('10').length).toBeGreaterThan(0); // Target score
+        expect(screen.getAllByText('7').length).toBeGreaterThan(0); // 70% of target
       });
     });
 
@@ -224,13 +216,13 @@ describe('MatchSimulator Component', () => {
       );
 
       // Act
-      const blackWinButton = screen.getByRole('button', { name: /black wins/i });
+      const blackWinButton = screen.getByTestId('black-win');
       await user.click(blackWinButton);
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('10')).toBeInTheDocument(); // Target score
-        expect(screen.getByText('7')).toBeInTheDocument(); // 70% of target
+        expect(screen.getAllByText('10').length).toBeGreaterThan(0); // Target score
+        expect(screen.getAllByText('7').length).toBeGreaterThan(0); // 70% of target
       });
     });
   });
@@ -249,14 +241,14 @@ describe('MatchSimulator Component', () => {
       );
 
       // Act - Set scores and submit
-      const yellowWinButton = screen.getByRole('button', { name: /yellow wins/i });
+      const yellowWinButton = screen.getByTestId('yellow-win');
       await user.click(yellowWinButton);
 
       await waitFor(() => {
-        expect(screen.getByText('10')).toBeInTheDocument();
+        expect(screen.getAllByText('10').length).toBeGreaterThan(0);
       });
 
-      const submitButton = screen.getByRole('button', { name: /submit result/i });
+      const submitButton = screen.getByTestId('submit-result');
       await user.click(submitButton);
 
       // Assert
@@ -284,7 +276,7 @@ describe('MatchSimulator Component', () => {
       );
 
       // Assert
-      const submitButton = screen.getByRole('button', { name: /submit result/i });
+      const submitButton = screen.getByTestId('submit-result');
       expect(submitButton).toBeDisabled();
     });
 
@@ -301,12 +293,12 @@ describe('MatchSimulator Component', () => {
       );
 
       // Act - Set a score
-      const yellowWinButton = screen.getByRole('button', { name: /yellow wins/i });
+      const yellowWinButton = screen.getByTestId('yellow-win');
       await user.click(yellowWinButton);
 
       // Assert
       await waitFor(() => {
-        const submitButton = screen.getByRole('button', { name: /submit result/i });
+        const submitButton = screen.getByTestId('submit-result');
         expect(submitButton).not.toBeDisabled();
       });
     });
@@ -328,14 +320,14 @@ describe('MatchSimulator Component', () => {
       );
 
       // Act
-      const yellowWinButton = screen.getByRole('button', { name: /yellow wins/i });
+      const yellowWinButton = screen.getByTestId('yellow-win');
       await user.click(yellowWinButton);
 
       await waitFor(() => {
-        expect(screen.getByText('10')).toBeInTheDocument();
+        expect(screen.getAllByText('10').length).toBeGreaterThan(0);
       });
 
-      const submitButton = screen.getByRole('button', { name: /submit result/i });
+      const submitButton = screen.getByTestId('submit-result');
       await user.click(submitButton);
 
       // Assert - Should show loading spinner briefly
@@ -360,14 +352,14 @@ describe('MatchSimulator Component', () => {
       );
 
       // Act
-      const yellowWinButton = screen.getByRole('button', { name: /yellow wins/i });
+      const yellowWinButton = screen.getByTestId('yellow-win');
       await user.click(yellowWinButton);
 
       await waitFor(() => {
-        expect(screen.getByText('10')).toBeInTheDocument();
+        expect(screen.getAllByText('10').length).toBeGreaterThan(0);
       });
 
-      const submitButton = screen.getByRole('button', { name: /submit result/i });
+      const submitButton = screen.getByTestId('submit-result');
       await user.click(submitButton);
 
       // Assert

@@ -36,37 +36,38 @@ export function Dashboard({ onCreateMatch }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        setLoading(true);
-        setError(null);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        // Load players, top players, and open matches in parallel
-        const [playersData, leaderboardData, matchesData] = await Promise.all([
-          playerApi.getAllPlayers(),
-          statsApi.leaderboard('all', 5),
-          matchApi.getOpenMatches(),
-        ]);
+      // Load players, top players, and open matches in parallel
+      const [playersData, leaderboardData, matchesData] = await Promise.all([
+        playerApi.getAllPlayers(),
+        statsApi.leaderboard('all', 5),
+        matchApi.getOpenMatches(),
+      ]);
 
-        setTopPlayers(leaderboardData);
+      setTopPlayers(leaderboardData);
 
-        // Transform backend matches to frontend format
-        const allMatches: DisplayMatch[] = [];
-        matchesData.forEach(division => {
-          division.matches.forEach(match => {
-            allMatches.push(transformMatch(match, playersData));
-          });
+      // Transform backend matches to frontend format
+      const allMatches: DisplayMatch[] = [];
+      matchesData.forEach(division => {
+        division.matches.forEach(match => {
+          allMatches.push(transformMatch(match, playersData));
         });
+      });
 
-        setMatches(allMatches);
-      } catch (err: any) {
-        console.error('Failed to load dashboard data:', err);
-        setError(err.message || 'Failed to load dashboard');
-      } finally {
-        setLoading(false);
-      }
+      setMatches(allMatches);
+    } catch (err: any) {
+      console.error('Failed to load dashboard data:', err);
+      setError(err.message || 'Failed to load dashboard');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
   }, []);
 
@@ -126,6 +127,7 @@ export function Dashboard({ onCreateMatch }: DashboardProps) {
             <p className="text-sm text-muted-foreground">
               Make sure the backend server is running on port 4567
             </p>
+            <Button onClick={loadData}>Retry</Button>
           </div>
         </Card>
       </div>

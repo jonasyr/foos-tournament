@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
+import { Button } from "./ui/button";
 import {
   Select,
   SelectContent,
@@ -23,20 +24,21 @@ export function StatsHub() {
   const [scope, setScope] = useState<MatchScope>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    async function loadStats() {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await statsApi.leaderboard(scope, 50);
-        setPlayers(data);
-      } catch (err: any) {
-        console.error('Failed to load stats:', err);
-        setError(err.message || 'Failed to load statistics');
-      } finally {
-        setLoading(false);
-      }
+  const loadStats = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await statsApi.leaderboard(scope, 50);
+      setPlayers(data);
+    } catch (err: any) {
+      console.error('Failed to load stats:', err);
+      setError(err.message || 'Failed to load statistics');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadStats();
   }, [scope]);
 
@@ -86,6 +88,7 @@ export function StatsHub() {
             <p className="text-sm text-muted-foreground">
               Make sure the backend server is running on port 4567
             </p>
+            <Button onClick={loadStats}>Retry</Button>
           </div>
         </Card>
       </div>

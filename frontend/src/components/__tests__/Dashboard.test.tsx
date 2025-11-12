@@ -10,7 +10,11 @@ const mockedApi = api as any;
 
 // Mock child components to simplify testing
 vi.mock('../MatchCard', () => ({
-  MatchCard: ({ match }: any) => <div data-testid={`match-${match.id}`}>{match.yellowTeam[0].name}</div>,
+  MatchCard: ({ id, yellowTeam, blackTeam, ...props }: any) => (
+    <div data-testid={`match-${id}`}>
+      {yellowTeam && yellowTeam[0] && yellowTeam[0].name}
+    </div>
+  ),
 }));
 
 vi.mock('../FAB', () => ({
@@ -109,9 +113,14 @@ describe('Dashboard Component', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('Alice')).toBeInTheDocument();
-        expect(screen.getByText('Bob')).toBeInTheDocument();
+        expect(screen.getByText('Top Players')).toBeInTheDocument();
       });
+
+      // Check leaderboard has player names (multiple elements with same name is OK)
+      const aliceElements = screen.getAllByText('Alice');
+      expect(aliceElements.length).toBeGreaterThan(0);
+      const bobElements = screen.getAllByText('Bob');
+      expect(bobElements.length).toBeGreaterThan(0);
     });
 
     it('should transform backend matches to display format', async () => {
@@ -169,7 +178,7 @@ describe('Dashboard Component', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText(/no matches found/i)).toBeInTheDocument();
+        expect(screen.getByText(/no matches available/i)).toBeInTheDocument();
       });
     });
 
@@ -180,9 +189,10 @@ describe('Dashboard Component', () => {
       // Act
       render(<Dashboard onCreateMatch={mockOnCreateMatch} />);
 
-      // Assert
+      // Assert - Multiple "Create Match" buttons exist (empty state + FAB)
       await waitFor(() => {
-        expect(screen.getByText(/create quick match/i)).toBeInTheDocument();
+        const createButtons = screen.getAllByText(/create match/i);
+        expect(createButtons.length).toBeGreaterThan(0);
       });
     });
   });
@@ -304,10 +314,12 @@ describe('Dashboard Component', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('Alice')).toBeInTheDocument();
-        expect(screen.getByText('Bob')).toBeInTheDocument();
+        expect(screen.getByText('Top Players')).toBeInTheDocument();
       });
 
+      // Check leaderboard has player names
+      expect(screen.getAllByText('Alice').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Bob').length).toBeGreaterThan(0);
       expect(mockedApi.statsApi.leaderboard).toHaveBeenCalledWith('all', 5);
     });
 
@@ -317,12 +329,12 @@ describe('Dashboard Component', () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByText('Alice')).toBeInTheDocument();
+        expect(screen.getByText('Top Players')).toBeInTheDocument();
       });
 
       // Check that stats are displayed
-      expect(screen.getByText(/1850/i)).toBeInTheDocument(); // ELO
-      expect(screen.getByText(/70%|0.7/i)).toBeInTheDocument(); // Win rate
+      expect(screen.getByText('1850')).toBeInTheDocument(); // ELO
+      expect(screen.getByText('35W - 15L')).toBeInTheDocument(); // Win/Loss
     });
   });
 });
