@@ -44,9 +44,17 @@ Barely working version, expect documentation and a demo soon.
 
 ### Backend (Sinatra API)
 
+**Option 1: Using the convenience script (recommended)**
 ```bash
-> ruby web_router.rb
+> ./start_server.sh
 ```
+
+**Option 2: Using bundle exec directly**
+```bash
+> bundle exec ruby web_router.rb
+```
+
+**Note:** You must use `bundle exec` to avoid gem version conflicts. Do NOT run `ruby web_router.rb` directly.
 
 The backend will start on port 4567.
 
