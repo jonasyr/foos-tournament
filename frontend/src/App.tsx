@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Navigation } from "./components/Navigation";
-import { Dashboard } from "./components/Dashboard";
+import { Dashboard, DashboardHandle } from "./components/Dashboard";
 import { QuickMatchCreator } from "./components/QuickMatchCreator";
 import { DivisionView } from "./components/DivisionView";
 import { PlayerProfile } from "./components/PlayerProfile";
@@ -12,6 +12,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [darkMode, setDarkMode] = useState(false);
   const [quickMatchOpen, setQuickMatchOpen] = useState(false);
+  const dashboardRef = useRef<DashboardHandle>(null);
 
   useEffect(() => {
     // Check system preference on mount
@@ -35,7 +36,7 @@ export default function App() {
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
-        return <Dashboard onCreateMatch={() => setQuickMatchOpen(true)} />;
+        return <Dashboard ref={dashboardRef} onCreateMatch={() => setQuickMatchOpen(true)} />;
       case "divisions":
         return <DivisionView />;
       case "stats":
@@ -45,7 +46,7 @@ export default function App() {
       case "components":
         return <ComponentLibrary />;
       default:
-        return <Dashboard onCreateMatch={() => setQuickMatchOpen(true)} />;
+        return <Dashboard ref={dashboardRef} onCreateMatch={() => setQuickMatchOpen(true)} />;
     }
   };
 
@@ -63,6 +64,7 @@ export default function App() {
       <QuickMatchCreator
         open={quickMatchOpen}
         onClose={() => setQuickMatchOpen(false)}
+        onMatchCreated={() => dashboardRef.current?.refresh()}
       />
 
       <Toaster position="top-right" />

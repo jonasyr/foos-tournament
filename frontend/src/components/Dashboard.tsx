@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { MatchCard } from "./MatchCard";
 import { FAB } from "./FAB";
 import { Card } from "./ui/card";
@@ -11,6 +11,10 @@ import type { LeaderboardEntry, OpenMatch, PlayersResponse } from "../lib/types"
 
 interface DashboardProps {
   onCreateMatch: () => void;
+}
+
+export interface DashboardHandle {
+  refresh: () => void;
 }
 
 // Frontend match representation for display
@@ -27,7 +31,7 @@ interface DisplayMatch {
   target_score?: number;
 }
 
-export function Dashboard({ onCreateMatch }: DashboardProps) {
+export const Dashboard = forwardRef<DashboardHandle, DashboardProps>(({ onCreateMatch }, ref) => {
   const [filter, setFilter] = useState<"all" | "league" | "quick">("all");
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<DisplayMatch | null>(null);
@@ -66,6 +70,11 @@ export function Dashboard({ onCreateMatch }: DashboardProps) {
       setLoading(false);
     }
   };
+
+  // Expose loadData to parent via ref
+  useImperativeHandle(ref, () => ({
+    refresh: loadData
+  }));
 
   useEffect(() => {
     loadData();
@@ -271,13 +280,9 @@ export function Dashboard({ onCreateMatch }: DashboardProps) {
           open={simulatorOpen}
           onClose={() => setSimulatorOpen(false)}
           match={selectedMatch}
-          onUpdateMatch={(updatedMatch) => {
-            setMatches(matches.map(m =>
-              m.id === updatedMatch.id ? updatedMatch : m
-            ));
-          }}
+          onResultSubmitted={loadData}
         />
       )}
     </div>
   );
-}
+});
