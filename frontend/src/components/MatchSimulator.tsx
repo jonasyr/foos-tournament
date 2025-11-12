@@ -4,30 +4,37 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Minus, CheckCircle, ArrowUp, ArrowDown } from "lucide-react";
-import { mockPlayers } from "../lib/mockData";
+import { Plus, Minus, CheckCircle, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import { Separator } from "./ui/separator";
-import type { Match } from "../App";
+import { matchApi } from "../lib/api";
+import { toast } from "sonner@2.0.3";
+import type { OpenMatch, MatchResultPayload } from "../lib/types";
 
 interface MatchSimulatorProps {
   open: boolean;
   onClose: () => void;
-  match: Match;
-  onUpdateMatch: (match: Match) => void;
+  match: OpenMatch;
+  onResultSubmitted?: () => void;
 }
 
-export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSimulatorProps) {
-  const [yellowScore, setYellowScore] = useState(match.yellowScore);
-  const [blackScore, setBlackScore] = useState(match.blackScore);
+export function MatchSimulator({ open, onClose, match, onResultSubmitted }: MatchSimulatorProps) {
+  const [yellowScore, setYellowScore] = useState(0);
+  const [blackScore, setBlackScore] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [startTime, setStartTime] = useState<number | null>(null);
 
-  // Reset scores when match changes
+  // Reset scores and start time when match changes or dialog opens
   useEffect(() => {
-    setYellowScore(match.yellowScore);
-    setBlackScore(match.blackScore);
-  }, [match.id]);
+    if (open) {
+      setYellowScore(0);
+      setBlackScore(0);
+      setStartTime(Math.floor(Date.now() / 1000));
+    }
+  }, [match.id, open]);
 
-  const yellowPlayers = match.yellowTeam;
-  const blackPlayers = match.blackTeam;
+  const yellowPlayers = match.teams?.yellow?.names || [];
+  const blackPlayers = match.teams?.black?.names || [];
+  const targetScore = match.target_score || 10;
 
   const incrementYellow = () => setYellowScore((prev) => Math.min(prev + 1, 50));
   const decrementYellow = () => setYellowScore((prev) => Math.max(prev - 1, 0));
@@ -35,26 +42,61 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
   const decrementBlack = () => setBlackScore((prev) => Math.max(prev - 1, 0));
 
   const setYellowWin = () => {
-    setYellowScore(10);
-    setBlackScore(0);
+    setYellowScore(targetScore);
+    setBlackScore(Math.floor(targetScore * 0.7)); // Lose with 70% of target
   };
 
   const setBlackWin = () => {
-    setBlackScore(10);
-    setYellowScore(0);
+    setBlackScore(targetScore);
+    setYellowScore(Math.floor(targetScore * 0.7));
   };
 
-  // Simulate standings based on score
+  const handleSubmitResult = async () => {
+    try {
+      setSubmitting(true);
+
+      const endTime = Math.floor(Date.now() / 1000);
+      const payload: MatchResultPayload = {
+        id: match.id,
+        results: [[yellowScore, blackScore]],
+        start: startTime || undefined,
+        end: endTime,
+      };
+
+      await matchApi.setResult(payload);
+
+      toast.success("Match result submitted!", {
+        description: `${yellowScore > blackScore ? 'Yellow' : 'Black'} team wins ${Math.max(yellowScore, blackScore)}-${Math.min(yellowScore, blackScore)}`,
+      });
+
+      onClose();
+
+      // Notify parent to refresh data
+      if (onResultSubmitted) {
+        onResultSubmitted();
+      }
+    } catch (err: any) {
+      console.error('Failed to submit result:', err);
+      toast.error('Failed to submit result', {
+        description: err.message || 'Please try again.',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Simulate standings based on score - simplified version
   const allPlayers = [...yellowPlayers, ...blackPlayers];
-  const simulatedStandings = allPlayers.map((player) => {
-    const isYellowTeam = yellowPlayers.some(p => p.id === player.id);
+  const simulatedStandings = allPlayers.map((playerName, idx) => {
+    const isYellowTeam = idx < yellowPlayers.length;
     const isWinning = isYellowTeam ? yellowScore > blackScore : blackScore > yellowScore;
     const eloChange = isWinning ? 15 : -10;
-    
+    const baseElo = 1000 + (10 - idx) * 20; // Mock base ELO
+
     return {
-      id: player.id,
-      name: player.name,
-      points: player.elo + eloChange,
+      id: idx,
+      name: playerName,
+      points: baseElo + eloChange,
       change: isWinning ? "up" : "down",
     };
   }).sort((a, b) => b.points - a.points);
@@ -84,7 +126,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                       Yellow Team
                     </h4>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {yellowPlayers.map((p) => p.name).join(", ")}
+                      {yellowPlayers.join(", ")}
                     </p>
                   </div>
                 </div>
@@ -138,7 +180,7 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
                       Black Team
                     </h4>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {blackPlayers.map((p) => p.name).join(", ")}
+                      {blackPlayers.join(", ")}
                     </p>
                   </div>
                 </div>
@@ -187,24 +229,25 @@ export function MatchSimulator({ open, onClose, match, onUpdateMatch }: MatchSim
             <Separator />
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={onClose} className="flex-1">
+              <Button variant="outline" onClick={onClose} className="flex-1" disabled={submitting}>
                 Cancel
               </Button>
               <Button
                 className="flex-1 gap-2 bg-gradient-to-r from-secondary to-secondary/80"
-                onClick={() => {
-                  const updatedMatch = {
-                    ...match,
-                    yellowScore,
-                    blackScore,
-                    timestamp: yellowScore === 0 && blackScore === 0 ? match.timestamp : new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-                  };
-                  onUpdateMatch(updatedMatch);
-                  onClose();
-                }}
+                onClick={handleSubmitResult}
+                disabled={submitting || (yellowScore === 0 && blackScore === 0)}
               >
-                <CheckCircle className="w-4 h-4" />
-                Confirm Result
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Confirm Result
+                  </>
+                )}
               </Button>
             </div>
           </div>
