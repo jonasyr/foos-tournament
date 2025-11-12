@@ -8,12 +8,26 @@ import { Plus, Minus, CheckCircle, ArrowUp, ArrowDown, Loader2 } from "lucide-re
 import { Separator } from "./ui/separator";
 import { matchApi } from "../lib/api";
 import { toast } from "sonner";
-import type { OpenMatch, MatchResultPayload } from "../lib/types";
+import type { MatchResultPayload } from "../lib/types";
+
+// DisplayMatch interface from Dashboard - for open matches
+interface DisplayMatch {
+  id: string;
+  timestamp: string;
+  yellowTeam: Array<{ id: string; name: string; elo: number }>;
+  blackTeam: Array<{ id: string; name: string; elo: number }>;
+  yellowScore: number;
+  blackScore: number;
+  duration: string;
+  isQuickMatch: boolean;
+  mode?: string;
+  target_score?: number;
+}
 
 interface MatchSimulatorProps {
   open: boolean;
   onClose: () => void;
-  match: OpenMatch;
+  match: DisplayMatch;
   onResultSubmitted?: () => void;
 }
 
@@ -32,8 +46,8 @@ export function MatchSimulator({ open, onClose, match, onResultSubmitted }: Matc
     }
   }, [match.id, open]);
 
-  const yellowPlayers = match.teams?.yellow?.names || [];
-  const blackPlayers = match.teams?.black?.names || [];
+  const yellowPlayers = match.yellowTeam?.map(p => p.name) || [];
+  const blackPlayers = match.blackTeam?.map(p => p.name) || [];
   const targetScore = match.target_score || 10;
 
   const incrementYellow = () => setYellowScore((prev) => Math.min(prev + 1, 50));
@@ -43,12 +57,12 @@ export function MatchSimulator({ open, onClose, match, onResultSubmitted }: Matc
 
   const setYellowWin = () => {
     setYellowScore(targetScore);
-    setBlackScore(Math.floor(targetScore * 0.7)); // Lose with 70% of target
+    setBlackScore(0);
   };
 
   const setBlackWin = () => {
     setBlackScore(targetScore);
-    setYellowScore(Math.floor(targetScore * 0.7));
+    setYellowScore(0);
   };
 
   const handleSubmitResult = async () => {

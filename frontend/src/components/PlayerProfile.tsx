@@ -10,6 +10,7 @@ import {
   TrendingUp,
   CheckCircle,
   XCircle,
+  Loader2,
 } from "lucide-react";
 import { motion } from "motion/react";
 import {
@@ -29,16 +30,128 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import type { Match } from "../App";
 import { calculatePlayerStats } from "../lib/statsCalculator";
+import { useState, useEffect } from "react";
+import { matchApi, playerApi } from "../lib/api";
+import type { OpenMatch, PlayersResponse } from "../lib/types";
 
-interface PlayerProfileProps {
-  matches: Match[];
+// DisplayMatch interface - matches Dashboard's structure
+interface DisplayMatch {
+  id: string;
+  timestamp: string;
+  yellowTeam: Array<{ id: string; name: string; elo: number }>;
+  blackTeam: Array<{ id: string; name: string; elo: number }>;
+  yellowScore: number;
+  blackScore: number;
+  duration: string;
+  isQuickMatch: boolean;
+  mode?: string;
+  target_score?: number;
 }
 
-export function PlayerProfile({ matches }: PlayerProfileProps) {
+export function PlayerProfile() {
+  const [matches, setMatches] = useState<DisplayMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [playersData, matchesData] = await Promise.all([
+        playerApi.getAllPlayers(),
+        matchApi.getOpenMatches(),
+      ]);
+
+      // Transform backend matches to frontend format
+      const allMatches: DisplayMatch[] = [];
+      matchesData.forEach(division => {
+        division.matches.forEach(match => {
+          allMatches.push(transformMatch(match, playersData));
+        });
+      });
+
+      setMatches(allMatches);
+    } catch (err: any) {
+      console.error('Failed to load player profile data:', err);
+      setError(err.message || 'Failed to load profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Transform backend OpenMatch to frontend DisplayMatch
+  function transformMatch(match: OpenMatch, playersData: PlayersResponse): DisplayMatch {
+    const yellowTeam = match.teams.yellow.ids.map((id, idx) => ({
+      id: String(id),
+      name: match.teams.yellow.names[idx] || 'Unknown',
+      elo: 1500,
+    }));
+
+    const blackTeam = match.teams.black.ids.map((id, idx) => ({
+      id: String(id),
+      name: match.teams.black.names[idx] || 'Unknown',
+      elo: 1500,
+    }));
+
+    return {
+      id: String(match.id),
+      timestamp: 'Pending',
+      yellowTeam,
+      blackTeam,
+      yellowScore: 0,
+      blackScore: 0,
+      duration: '0m',
+      isQuickMatch: match.quick_match,
+      mode: match.mode,
+      target_score: match.target_score,
+    };
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Loading player profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-8 max-w-md">
+          <div className="text-center space-y-4">
+            <h3 className="text-xl font-semibold">Failed to Load Profile</h3>
+            <p className="text-muted-foreground">{error}</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   const playerStats = calculatePlayerStats(matches);
   const player = playerStats[0]; // Top player
+
+  if (!player) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-8 max-w-md">
+          <div className="text-center space-y-4">
+            <h3 className="text-xl font-semibold">No Player Data</h3>
+            <p className="text-muted-foreground">No player statistics available yet.</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
   const winRate =
     player.gamesPlayed > 0
       ? (player.wins / player.gamesPlayed) * 100
