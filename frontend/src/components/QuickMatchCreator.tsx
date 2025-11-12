@@ -51,7 +51,13 @@ export function QuickMatchCreator({ open, onClose, onMatchCreated }: QuickMatchC
       setLoading(true);
       setError(null);
       const playersData = await playerApi.getAllPlayers();
-      setPlayers(playersData);
+      // Convert object to array: API returns {1: {name, nick}, 2: {name, nick}}
+      // but we need [{id: 1, name, nick}, {id: 2, name, nick}]
+      const playersArray = Object.entries(playersData).map(([id, player]) => ({
+        id: Number(id),
+        ...player,
+      }));
+      setPlayers(playersArray);
     } catch (err: any) {
       console.error('Failed to load players:', err);
       setError(err.message || 'Failed to load players');
