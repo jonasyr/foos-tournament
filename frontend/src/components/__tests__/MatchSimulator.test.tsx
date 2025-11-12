@@ -3,7 +3,20 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MatchSimulator } from '../MatchSimulator';
 import * as api from '../../lib/api';
-import type { OpenMatch } from '../../lib/types';
+
+// DisplayMatch interface - matches what Dashboard passes to MatchSimulator
+interface DisplayMatch {
+  id: string;
+  timestamp: string;
+  yellowTeam: Array<{ id: string; name: string; elo: number }>;
+  blackTeam: Array<{ id: string; name: string; elo: number }>;
+  yellowScore: number;
+  blackScore: number;
+  duration: string;
+  isQuickMatch: boolean;
+  mode?: string;
+  target_score?: number;
+}
 
 // Mock the API
 vi.mock('../../lib/api');
@@ -19,22 +32,23 @@ vi.mock('sonner', () => ({
 }));
 
 describe('MatchSimulator Component', () => {
-  const mockMatch: OpenMatch = {
-    id: 42,
-    division_id: 1,
-    round: 3,
-    player_ids: [1, 2, 3, 4],
-    players: ['Alice', 'Bob', 'Carol', 'Dave'],
+  const mockMatch: DisplayMatch = {
+    id: '42',
+    timestamp: 'Pending',
+    yellowTeam: [
+      { id: '1', name: 'Alice', elo: 1850 },
+      { id: '2', name: 'Bob', elo: 1720 },
+    ],
+    blackTeam: [
+      { id: '3', name: 'Carol', elo: 1680 },
+      { id: '4', name: 'Dave', elo: 1650 },
+    ],
+    yellowScore: 0,
+    blackScore: 0,
+    duration: '0m',
+    isQuickMatch: true,
     mode: 'doubles',
-    quick_match: true,
-    teams: {
-      yellow: { ids: [1, 2], names: ['Alice', 'Bob'] },
-      black: { ids: [3, 4], names: ['Carol', 'Dave'] },
-    },
     target_score: 10,
-    submatches: [],
-    win_condition: 'score_limit',
-    played: false,
   };
 
   const mockOnClose = vi.fn();

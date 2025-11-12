@@ -98,10 +98,10 @@ describe('API Client Tests', () => {
     describe('getAllPlayers - Happy Path', () => {
       it('should fetch all players successfully', async () => {
         // Arrange
-        const mockPlayers: Player[] = [
-          { id: 1, name: 'Alice Johnson', nick: 'Alice', elo: 1850 },
-          { id: 2, name: 'Bob Smith', nick: 'Bob', elo: 1720 },
-        ];
+        const mockPlayers = {
+          '1': { name: 'Alice Johnson', nick: 'Alice' },
+          '2': { name: 'Bob Smith', nick: 'Bob' },
+        };
         mockGet.mockResolvedValue({ data: mockPlayers });
 
         // Act
@@ -109,20 +109,21 @@ describe('API Client Tests', () => {
 
         // Assert
         expect(result).toEqual(mockPlayers);
-        expect(result).toHaveLength(2);
-        expect(result[0].name).toBe('Alice Johnson');
+        expect(Object.keys(result)).toHaveLength(2);
+        expect(result['1'].name).toBe('Alice Johnson');
+        expect(result['2'].name).toBe('Bob Smith');
       });
 
-      it('should return empty array when no players exist', async () => {
+      it('should return empty object when no players exist', async () => {
         // Arrange
-        mockGet.mockResolvedValue({ data: [] });
+        mockGet.mockResolvedValue({ data: {} });
 
         // Act
         const result = await playerApi.getAllPlayers();
 
         // Assert
-        expect(result).toEqual([]);
-        expect(result).toHaveLength(0);
+        expect(result).toEqual({});
+        expect(Object.keys(result)).toHaveLength(0);
       });
     });
   });

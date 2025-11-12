@@ -10,7 +10,7 @@ vi.mock('../../lib/api');
 const mockedApi = api as any;
 
 // Mock sonner toast
-vi.mock('sonner@2.0.3', () => ({
+vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
     error: vi.fn(),
