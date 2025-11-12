@@ -439,6 +439,32 @@ get '/api/get_open_matches' do
   json_api(response)
 end
 
+get '/api/get_played_matches' do
+  season_repo = SeasonRepository.new()
+  match_repo = MatchRepository.new()
+  player_repo = PlayerRepository.new
+
+  current_season = season_repo.get_most_recent_season()
+  divisions = current_season.divisions
+
+  players = player_repo.get_all_players_by_id()
+
+  response = []
+  divisions.each do |d|
+    division_data = {}
+    division_data[:division_id] = d.id
+    division_data[:name] = d.name
+    division_data[:matches] = []
+    finished_matches = d.get_finished_matches()
+    finished_matches.each do |m|
+      division_data[:matches] << serialize_played_match(m, players)
+    end
+    response << division_data
+  end
+
+  json_api(response)
+end
+
 get '/api/get_quick_match/:id' do
   match_repo = MatchRepository.new()
   player_repo = PlayerRepository.new
@@ -927,6 +953,32 @@ def serialize_open_match(match, players_by_id)
       [[name1, name3], [name2, name4]],
       [[name1, name4], [name2, name3]],
     ]
+  end
+
+  data
+end
+
+def serialize_played_match(match, players_by_id)
+  # Start with the same structure as open matches
+  data = serialize_open_match(match, players_by_id)
+
+  # Add played match specific data
+  if match.played?
+    match.calculate_victories()
+    data[:scores] = match.scores
+    data[:victories] = match.victories
+    data[:time] = match.time
+    data[:duration] = match.duration
+    data[:played] = true
+
+    # Add submatches with scores if available
+    if match.scores && match.scores.is_a?(Array)
+      data[:submatches] = match.scores.map do |submatch_scores|
+        {
+          :scores => submatch_scores
+        }
+      end
+    end
   end
 
   data

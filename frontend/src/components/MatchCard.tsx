@@ -78,14 +78,14 @@ export function MatchCard({
                   </Avatar>
                 ))}
               </div>
-              <div className="flex flex-col min-w-0">
+              <span className="text-sm truncate">
                 {yellowTeam.map((player, idx) => (
-                  <span key={player.id} className="text-sm truncate">
+                  <span key={player.id}>
                     {player.name}
                     {idx < yellowTeam.length - 1 && ", "}
                   </span>
                 ))}
-              </div>
+              </span>
             </div>
             <span className="text-2xl font-semibold shrink-0 ml-2">{yellowScore}</span>
           </div>
@@ -102,14 +102,14 @@ export function MatchCard({
                   </Avatar>
                 ))}
               </div>
-              <div className="flex flex-col min-w-0">
+              <span className="text-sm truncate">
                 {blackTeam.map((player, idx) => (
-                  <span key={player.id} className="text-sm truncate">
+                  <span key={player.id}>
                     {player.name}
                     {idx < blackTeam.length - 1 && ", "}
                   </span>
                 ))}
-              </div>
+              </span>
             </div>
             <span className="text-2xl font-semibold shrink-0 ml-2">{blackScore}</span>
           </div>
