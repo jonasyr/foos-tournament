@@ -972,10 +972,12 @@ def serialize_played_match(match, players_by_id)
     data[:played] = true
 
     # Add submatches with scores if available
-    if match.scores && match.scores.is_a?(Array)
+    # Frontend expects scores to be array of arrays (score progression)
+    # We only have final scores, so wrap each in an array
+    if match.scores && match.scores.is_a?(Array) && match.scores.length > 0
       data[:submatches] = match.scores.map do |submatch_scores|
         {
-          :scores => submatch_scores
+          :scores => [submatch_scores]  # Wrap in array for frontend compatibility
         }
       end
     end
