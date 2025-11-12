@@ -257,33 +257,33 @@ export function PlayerProfile() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
           >
-            <Card className="p-4 text-center hover:shadow-lg transition-shadow">
+            <Card className="p-4 text-center hover:shadow-lg transition-shadow min-h-[140px] sm:min-h-[160px] flex flex-col justify-center">
               <div className="mb-2">
-                <div className="relative w-20 h-20 mx-auto mb-2">
-                  <svg className="w-20 h-20 transform -rotate-90">
+                <div className="relative w-16 h-16 mx-auto mb-2">
+                  <svg className="w-16 h-16 transform -rotate-90">
                     <circle
-                      cx="40"
-                      cy="40"
-                      r="36"
+                      cx="32"
+                      cy="32"
+                      r="28"
                       stroke="currentColor"
-                      strokeWidth="8"
+                      strokeWidth="6"
                       fill="transparent"
                       className="text-muted"
                     />
                     <circle
-                      cx="40"
-                      cy="40"
-                      r="36"
+                      cx="32"
+                      cy="32"
+                      r="28"
                       stroke="currentColor"
-                      strokeWidth="8"
+                      strokeWidth="6"
                       fill="transparent"
-                      strokeDasharray={`${2 * Math.PI * 36}`}
-                      strokeDashoffset={`${2 * Math.PI * 36 * (1 - winRate / 100)}`}
+                      strokeDasharray={`${2 * Math.PI * 28}`}
+                      strokeDashoffset={`${2 * Math.PI * 28 * (1 - winRate / 100)}`}
                       className="text-secondary"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xl font-semibold">
+                    <span className="text-lg font-semibold">
                       {winRate.toFixed(0)}%
                     </span>
                   </div>
@@ -301,9 +301,9 @@ export function PlayerProfile() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
           >
-            <Card className="p-4 text-center hover:shadow-lg transition-shadow">
+            <Card className="p-4 text-center hover:shadow-lg transition-shadow min-h-[140px] sm:min-h-[160px] flex flex-col justify-center">
               <div className="mb-2">
-                <Target className="w-12 h-12 text-primary mx-auto" />
+                <Target className="w-16 h-16 text-primary mx-auto" />
               </div>
               <div className="text-3xl font-semibold text-primary">
                 {player.gamesPlayed}
@@ -317,10 +317,10 @@ export function PlayerProfile() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
           >
-            <Card className="p-4 text-center hover:shadow-lg transition-shadow">
+            <Card className="p-4 text-center hover:shadow-lg transition-shadow min-h-[140px] sm:min-h-[160px] flex flex-col justify-center">
               <div className="mb-2">
                 <Flame
-                  className={`w-12 h-12 mx-auto ${currentStreak > 3 ? "text-accent animate-pulse" : "text-muted-foreground"}`}
+                  className={`w-16 h-16 mx-auto ${currentStreak > 3 ? "text-accent animate-pulse" : "text-muted-foreground"}`}
                 />
               </div>
               <div className="text-3xl font-semibold text-accent">
@@ -335,9 +335,9 @@ export function PlayerProfile() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
           >
-            <Card className="p-4 text-center hover:shadow-lg transition-shadow">
+            <Card className="p-4 text-center hover:shadow-lg transition-shadow min-h-[140px] sm:min-h-[160px] flex flex-col justify-center">
               <div className="mb-2">
-                <TrendingUp className="w-12 h-12 text-secondary mx-auto" />
+                <TrendingUp className="w-16 h-16 text-secondary mx-auto" />
               </div>
               <div className="text-3xl font-semibold text-secondary">
                 +{player.wins - player.losses}

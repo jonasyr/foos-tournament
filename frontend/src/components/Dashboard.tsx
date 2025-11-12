@@ -33,6 +33,7 @@ interface DisplayMatch {
 
 export const Dashboard = forwardRef<DashboardHandle, DashboardProps>(({ onCreateMatch }, ref) => {
   const [filter, setFilter] = useState<"all" | "league" | "quick">("all");
+  const [viewMode, setViewMode] = useState<"open" | "completed">("open");
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<DisplayMatch | null>(null);
   const [topPlayers, setTopPlayers] = useState<LeaderboardEntry[]>([]);
@@ -45,24 +46,36 @@ export const Dashboard = forwardRef<DashboardHandle, DashboardProps>(({ onCreate
       setLoading(true);
       setError(null);
 
-      // Load players, top players, and open matches in parallel
-      const [playersData, leaderboardData, matchesData] = await Promise.all([
+      // Load players and top players
+      const [playersData, leaderboardData] = await Promise.all([
         playerApi.getAllPlayers(),
         statsApi.leaderboard('all', 5),
-        matchApi.getOpenMatches(),
       ]);
 
       setTopPlayers(leaderboardData);
+
+      // Load matches based on view mode
+      let matchesData;
+      if (viewMode === "open") {
+        matchesData = await matchApi.getOpenMatches();
+      } else {
+        matchesData = await matchApi.getPlayedMatches();
+      }
 
       // Transform backend matches to frontend format
       const allMatches: DisplayMatch[] = [];
       matchesData.forEach(division => {
         division.matches.forEach(match => {
-          allMatches.push(transformMatch(match, playersData));
+          allMatches.push(transformMatch(match, playersData, viewMode === "completed"));
         });
       });
 
-      setMatches(allMatches);
+      // If completed view, limit to last 10 matches
+      const displayMatches = viewMode === "completed"
+        ? allMatches.slice(-10).reverse()
+        : allMatches;
+
+      setMatches(displayMatches);
     } catch (err: any) {
       console.error('Failed to load dashboard data:', err);
       setError(err.message || 'Failed to load dashboard');
@@ -78,10 +91,10 @@ export const Dashboard = forwardRef<DashboardHandle, DashboardProps>(({ onCreate
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [viewMode]); // Reload when view mode changes
 
   // Transform backend OpenMatch to frontend DisplayMatch
-  function transformMatch(match: OpenMatch, playersData: PlayersResponse): DisplayMatch {
+  function transformMatch(match: OpenMatch, playersData: PlayersResponse, played: boolean): DisplayMatch {
     const yellowTeam = match.teams.yellow.ids.map((id, idx) => ({
       id: String(id),
       name: match.teams.yellow.names[idx] || 'Unknown',
@@ -94,13 +107,26 @@ export const Dashboard = forwardRef<DashboardHandle, DashboardProps>(({ onCreate
       elo: 1500, // Default ELO
     }));
 
+    // For played matches, extract scores from submatches
+    let yellowScore = 0;
+    let blackScore = 0;
+    if (played && match.submatches && match.submatches.length > 0) {
+      // Get the final score from the last submatch
+      const lastSubmatch = match.submatches[match.submatches.length - 1];
+      if (lastSubmatch.scores && lastSubmatch.scores.length > 0) {
+        const finalScore = lastSubmatch.scores[lastSubmatch.scores.length - 1];
+        yellowScore = finalScore[0] || 0;
+        blackScore = finalScore[1] || 0;
+      }
+    }
+
     return {
       id: String(match.id),
-      timestamp: 'Pending',
+      timestamp: played ? 'Completed' : 'Pending',
       yellowTeam,
       blackTeam,
-      yellowScore: 0,
-      blackScore: 0,
+      yellowScore,
+      blackScore,
       duration: '0m',
       isQuickMatch: match.quick_match,
       mode: match.mode,
@@ -168,32 +194,54 @@ export const Dashboard = forwardRef<DashboardHandle, DashboardProps>(({ onCreate
         <div className="grid md:grid-cols-[1fr,320px] gap-6">
           {/* Main Content */}
           <div>
-            {/* Filter Chips */}
-            <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
-              <Button
-                variant={filter === "all" ? "default" : "outline"}
-                onClick={() => setFilter("all")}
-                className="rounded-full whitespace-nowrap"
-                size="sm"
-              >
-                All Matches
-              </Button>
-              <Button
-                variant={filter === "league" ? "default" : "outline"}
-                onClick={() => setFilter("league")}
-                className="rounded-full whitespace-nowrap"
-                size="sm"
-              >
-                League
-              </Button>
-              <Button
-                variant={filter === "quick" ? "default" : "outline"}
-                onClick={() => setFilter("quick")}
-                className="rounded-full whitespace-nowrap"
-                size="sm"
-              >
-                Quick
-              </Button>
+            {/* View Mode Toggle */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                <Button
+                  variant={viewMode === "open" ? "default" : "outline"}
+                  onClick={() => setViewMode("open")}
+                  className="rounded-full whitespace-nowrap"
+                  size="sm"
+                >
+                  Open Matches
+                </Button>
+                <Button
+                  variant={viewMode === "completed" ? "default" : "outline"}
+                  onClick={() => setViewMode("completed")}
+                  className="rounded-full whitespace-nowrap"
+                  size="sm"
+                >
+                  Recent Completed
+                </Button>
+              </div>
+
+              {/* Filter Chips */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                <Button
+                  variant={filter === "all" ? "default" : "outline"}
+                  onClick={() => setFilter("all")}
+                  className="rounded-full whitespace-nowrap"
+                  size="sm"
+                >
+                  All
+                </Button>
+                <Button
+                  variant={filter === "league" ? "default" : "outline"}
+                  onClick={() => setFilter("league")}
+                  className="rounded-full whitespace-nowrap"
+                  size="sm"
+                >
+                  League
+                </Button>
+                <Button
+                  variant={filter === "quick" ? "default" : "outline"}
+                  onClick={() => setFilter("quick")}
+                  className="rounded-full whitespace-nowrap"
+                  size="sm"
+                >
+                  Quick
+                </Button>
+              </div>
             </div>
 
             {/* Match Cards Grid */}

@@ -256,6 +256,16 @@ export const matchApi = {
   },
 
   /**
+   * Get played (completed) matches across all divisions
+   */
+  async getPlayedMatches(): Promise<OpenMatchesResponse[]> {
+    const response = await apiClient.get<OpenMatchesResponse[]>(
+      `/api/get_played_matches`
+    );
+    return response.data;
+  },
+
+  /**
    * Create a new quick match
    * @param payload - Match creation details
    */

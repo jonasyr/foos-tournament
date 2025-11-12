@@ -46,7 +46,7 @@ export function MatchCard({
       transition={{ type: "spring", stiffness: 300 }}
     >
       <Card
-        className="p-4 hover:shadow-lg transition-shadow cursor-pointer border border-border bg-card/50 backdrop-blur-sm"
+        className="p-4 hover:shadow-lg transition-shadow cursor-pointer border border-border bg-card/50 backdrop-blur-sm min-h-[180px] sm:min-h-[200px] flex flex-col"
         onClick={onClick}
       >
         <div className="flex items-center justify-between mb-3">
@@ -65,52 +65,54 @@ export function MatchCard({
           </div>
         </div>
 
-        {/* Yellow Team */}
-        <div className="flex items-center justify-between mb-2 p-2 rounded-lg bg-accent/10">
-          <div className="flex items-center gap-2">
-            <div className="flex -space-x-2">
-              {yellowTeam.map((player) => (
-                <Avatar key={player.id} className="w-8 h-8 border-2 border-card">
-                  <AvatarFallback className="bg-accent text-white text-xs">
-                    {getInitials(player.name)}
-                  </AvatarFallback>
-                </Avatar>
-              ))}
+        <div className="flex-1 flex flex-col justify-center gap-2">
+          {/* Yellow Team */}
+          <div className="flex items-center justify-between p-2 rounded-lg bg-accent/10">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="flex -space-x-2 shrink-0">
+                {yellowTeam.map((player) => (
+                  <Avatar key={player.id} className="w-8 h-8 border-2 border-card">
+                    <AvatarFallback className="bg-accent text-white text-xs">
+                      {getInitials(player.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                ))}
+              </div>
+              <div className="flex flex-col min-w-0">
+                {yellowTeam.map((player, idx) => (
+                  <span key={player.id} className="text-sm truncate">
+                    {player.name}
+                    {idx < yellowTeam.length - 1 && ", "}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-col">
-              {yellowTeam.map((player, idx) => (
-                <span key={player.id} className="text-sm">
-                  {player.name}
-                  {idx < yellowTeam.length - 1 && ", "}
-                </span>
-              ))}
-            </div>
+            <span className="text-2xl font-semibold shrink-0 ml-2">{yellowScore}</span>
           </div>
-          <span className="text-2xl font-semibold">{yellowScore}</span>
-        </div>
 
-        {/* Black Team */}
-        <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
-          <div className="flex items-center gap-2">
-            <div className="flex -space-x-2">
-              {blackTeam.map((player) => (
-                <Avatar key={player.id} className="w-8 h-8 border-2 border-card">
-                  <AvatarFallback className="bg-foreground text-background text-xs">
-                    {getInitials(player.name)}
-                  </AvatarFallback>
-                </Avatar>
-              ))}
+          {/* Black Team */}
+          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="flex -space-x-2 shrink-0">
+                {blackTeam.map((player) => (
+                  <Avatar key={player.id} className="w-8 h-8 border-2 border-card">
+                    <AvatarFallback className="bg-foreground text-background text-xs">
+                      {getInitials(player.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                ))}
+              </div>
+              <div className="flex flex-col min-w-0">
+                {blackTeam.map((player, idx) => (
+                  <span key={player.id} className="text-sm truncate">
+                    {player.name}
+                    {idx < blackTeam.length - 1 && ", "}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-col">
-              {blackTeam.map((player, idx) => (
-                <span key={player.id} className="text-sm">
-                  {player.name}
-                  {idx < blackTeam.length - 1 && ", "}
-                </span>
-              ))}
-            </div>
+            <span className="text-2xl font-semibold shrink-0 ml-2">{blackScore}</span>
           </div>
-          <span className="text-2xl font-semibold">{blackScore}</span>
         </div>
       </Card>
     </motion.div>

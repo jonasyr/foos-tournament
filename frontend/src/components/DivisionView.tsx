@@ -3,7 +3,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { PlayerCard } from "./PlayerCard";
 import { MatchCard } from "./MatchCard";
 import { Card } from "./ui/card";
-import { mockDivisions } from "../lib/mockData";
 import { Loader2, Zap } from "lucide-react";
 import { motion } from "motion/react";
 import {
@@ -16,7 +15,7 @@ import {
 import { useState, useEffect } from "react";
 import { MatchSimulator } from "./MatchSimulator";
 import { calculatePlayerStats } from "../lib/statsCalculator";
-import { matchApi, playerApi } from "../lib/api";
+import { matchApi, playerApi, statsApi } from "../lib/api";
 import type { OpenMatch, PlayersResponse } from "../lib/types";
 
 // DisplayMatch interface - matches Dashboard's structure
@@ -31,13 +30,22 @@ interface DisplayMatch {
   isQuickMatch: boolean;
   mode?: string;
   target_score?: number;
+  played?: boolean;
+}
+
+interface Division {
+  id: number;
+  name: string;
+  level: string;
+  currentRound: number;
+  totalRounds: number;
 }
 
 export function DivisionView() {
-  const division = mockDivisions[0];
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<DisplayMatch | null>(null);
   const [matches, setMatches] = useState<DisplayMatch[]>([]);
+  const [division, setDivision] = useState<Division | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,16 +54,37 @@ export function DivisionView() {
       setLoading(true);
       setError(null);
 
-      const [playersData, matchesData] = await Promise.all([
+      const [playersData, openMatchesData, playedMatchesData] = await Promise.all([
         playerApi.getAllPlayers(),
         matchApi.getOpenMatches(),
+        matchApi.getPlayedMatches(),
       ]);
 
       // Transform backend matches to frontend format
       const allMatches: DisplayMatch[] = [];
-      matchesData.forEach(division => {
-        division.matches.forEach(match => {
-          allMatches.push(transformMatch(match, playersData));
+
+      // Add open matches
+      openMatchesData.forEach(divisionData => {
+        // Set division info from first division with matches
+        if (!division && divisionData.matches.length > 0) {
+          setDivision({
+            id: divisionData.division_id,
+            name: divisionData.name,
+            level: 'Premier', // Default since backend doesn't provide this
+            currentRound: 1, // Default
+            totalRounds: 10, // Default
+          });
+        }
+
+        divisionData.matches.forEach(match => {
+          allMatches.push(transformMatch(match, playersData, false));
+        });
+      });
+
+      // Add played (completed) matches
+      playedMatchesData.forEach(divisionData => {
+        divisionData.matches.forEach(match => {
+          allMatches.push(transformMatch(match, playersData, true));
         });
       });
 
@@ -73,7 +102,7 @@ export function DivisionView() {
   }, []);
 
   // Transform backend OpenMatch to frontend DisplayMatch
-  function transformMatch(match: OpenMatch, playersData: PlayersResponse): DisplayMatch {
+  function transformMatch(match: OpenMatch, playersData: PlayersResponse, played: boolean): DisplayMatch {
     const yellowTeam = match.teams.yellow.ids.map((id, idx) => ({
       id: String(id),
       name: match.teams.yellow.names[idx] || 'Unknown',
@@ -86,17 +115,31 @@ export function DivisionView() {
       elo: 1500,
     }));
 
+    // For played matches, extract scores from submatches
+    let yellowScore = 0;
+    let blackScore = 0;
+    if (played && match.submatches && match.submatches.length > 0) {
+      // Get the final score from the last submatch
+      const lastSubmatch = match.submatches[match.submatches.length - 1];
+      if (lastSubmatch.scores && lastSubmatch.scores.length > 0) {
+        const finalScore = lastSubmatch.scores[lastSubmatch.scores.length - 1];
+        yellowScore = finalScore[0] || 0;
+        blackScore = finalScore[1] || 0;
+      }
+    }
+
     return {
       id: String(match.id),
-      timestamp: 'Pending',
+      timestamp: played ? 'Completed' : 'Pending',
       yellowTeam,
       blackTeam,
-      yellowScore: 0,
-      blackScore: 0,
+      yellowScore,
+      blackScore,
       duration: '0m',
       isQuickMatch: match.quick_match,
       mode: match.mode,
       target_score: match.target_score,
+      played,
     };
   }
 
@@ -133,6 +176,15 @@ export function DivisionView() {
     );
   }
 
+  // Default division data if none is found
+  const displayDivision = division || {
+    id: 1,
+    name: 'League Division',
+    level: 'Premier',
+    currentRound: 1,
+    totalRounds: 10,
+  };
+
   return (
     <div className="min-h-screen pb-24 md:pb-8">
       {/* Header */}
@@ -146,13 +198,13 @@ export function DivisionView() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <h1>{division.name}</h1>
+                  <h1>{displayDivision.name}</h1>
                   <Badge className="bg-gradient-to-r from-primary to-secondary">
-                    {division.level}
+                    {displayDivision.level}
                   </Badge>
                 </div>
                 <p className="text-muted-foreground">
-                  Round {division.currentRound} of {division.totalRounds}
+                  Round {displayDivision.currentRound} of {displayDivision.totalRounds}
                 </p>
               </div>
             </div>
