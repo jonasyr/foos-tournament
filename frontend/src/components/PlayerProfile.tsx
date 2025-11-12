@@ -59,16 +59,26 @@ export function PlayerProfile() {
       setLoading(true);
       setError(null);
 
-      const [playersData, matchesData] = await Promise.all([
+      const [playersData, openMatchesData, playedMatchesData] = await Promise.all([
         playerApi.getAllPlayers(),
         matchApi.getOpenMatches(),
+        matchApi.getPlayedMatches(),
       ]);
 
       // Transform backend matches to frontend format
       const allMatches: DisplayMatch[] = [];
-      matchesData.forEach(division => {
+
+      // Add open matches
+      openMatchesData.forEach(division => {
         division.matches.forEach(match => {
-          allMatches.push(transformMatch(match, playersData));
+          allMatches.push(transformMatch(match, playersData, false));
+        });
+      });
+
+      // Add completed matches
+      playedMatchesData.forEach(division => {
+        division.matches.forEach(match => {
+          allMatches.push(transformMatch(match, playersData, true));
         });
       });
 
@@ -86,7 +96,7 @@ export function PlayerProfile() {
   }, []);
 
   // Transform backend OpenMatch to frontend DisplayMatch
-  function transformMatch(match: OpenMatch, playersData: PlayersResponse): DisplayMatch {
+  function transformMatch(match: OpenMatch, playersData: PlayersResponse, played: boolean): DisplayMatch {
     const yellowTeam = match.teams.yellow.ids.map((id, idx) => ({
       id: String(id),
       name: match.teams.yellow.names[idx] || 'Unknown',
@@ -99,14 +109,33 @@ export function PlayerProfile() {
       elo: 1500,
     }));
 
+    // For played matches, extract scores from submatches
+    let yellowScore = 0;
+    let blackScore = 0;
+    if (played && match.submatches && match.submatches.length > 0) {
+      // Count wins for each team across all submatches
+      match.submatches.forEach((submatch: any) => {
+        if (submatch.scores && submatch.scores.length > 0) {
+          const finalScore = submatch.scores[submatch.scores.length - 1];
+          if (finalScore && finalScore.length >= 2) {
+            if (finalScore[0] > finalScore[1]) {
+              yellowScore++;
+            } else if (finalScore[1] > finalScore[0]) {
+              blackScore++;
+            }
+          }
+        }
+      });
+    }
+
     return {
       id: String(match.id),
-      timestamp: 'Pending',
+      timestamp: played ? 'Completed' : 'Pending',
       yellowTeam,
       blackTeam,
-      yellowScore: 0,
-      blackScore: 0,
-      duration: '0m',
+      yellowScore,
+      blackScore,
+      duration: played ? '10m' : '0m',
       isQuickMatch: match.quick_match,
       mode: match.mode,
       target_score: match.target_score,
